@@ -8,3 +8,5 @@ build/
 .env
 token.json
 credentials.json
+.claude/
+data/

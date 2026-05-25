@@ -485,9 +485,11 @@ def _availability_tag(player: PlayerStats, *, is_free_agent: bool = False) -> st
     The tag tells the LLM explicitly whether a player is healthy, benched, or
     unavailable so it never has to infer injury status from stat volume.
 
-    For pitchers showing [BENCH] the tag flags that starting pitchers commonly
-    rotate through the bench on rest days — a bench SP is typically not a drop
-    candidate or an injury concern.
+    For starting pitchers (SP, P) shown on a `BN` slot the tag deliberately
+    avoids the word "bench" entirely and instead labels them as resting
+    between starts. LLMs reading "BENCH" tended to call SPs "bench players"
+    even when the explanation was attached — removing the trigger word
+    rather than relying on the explanation works better.
     """
     if is_free_agent:
         return "[FREE AGENT]"
@@ -498,7 +500,10 @@ def _availability_tag(player: PlayerStats, *, is_free_agent: bool = False) -> st
         return "[NOT-ACTIVE — does NOT count against max roster size; cannot be dropped to free a slot for a free-agent add]"
     if pos == "BN":
         if player.position in ("SP", "P"):
-            return "[BENCH — healthy; SPs rotate through bench on rest days]"
+            return (
+                "[STARTING PITCHER — resting between scheduled starts; "
+                "NOT a bench player or drop candidate]"
+            )
         return "[BENCH — active]"
     return "[ACTIVE — in starting lineup]"
 
@@ -526,7 +531,15 @@ class Skipper:
         api_key = load_anthropic_key()
         if not api_key:
             raise ValueError("No Anthropic API key configured")
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        # max_retries=20 lets the SDK ride out the org's per-minute token
+        # window when the conversation accumulates large tool-call context
+        # (a tool result + the cached system prompt + tools schema can push
+        # a single retry past 30k ITPM on Opus tiers). The SDK honors the
+        # `retry-after` / `retry-after-ms` headers that Anthropic returns on
+        # 429s, so most retries wait the exact remaining window rather than
+        # the capped exponential backoff. Default of 2 retries (≤6s of total
+        # backoff) is too short to clear a 60s rate-limit window.
+        self._client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=20)
 
     def _build_system_prompt(self) -> str:
         cat_lines: list[str] = []
@@ -2552,6 +2565,80 @@ class Skipper:
                 line += f"\n    Prior year: {py}"
             lines.append(line)
         return "\n".join(lines)
+
+    async def run_once(
+        self,
+        user_prompt: str,
+        *,
+        system_addendum: str | None = None,
+        max_tokens: int = 4096,
+        max_iterations: int = 25,
+    ) -> str:
+        """Non-interactive single-turn execution of the tool-use loop.
+
+        Unlike `chat()`, this does not touch `self.history` — each call is
+        isolated from any interactive session on the same Skipper instance.
+        Used by the podcast pipeline to produce seed content: more headroom
+        for tool iterations and a longer response than interactive chat.
+
+        `system_addendum` is appended to the standard Skipper system prompt
+        under a "Podcast Production Mode" section.
+        """
+        await self._ensure_teams()
+        system_prompt = self._build_system_prompt()
+        if system_addendum:
+            system_prompt = (
+                f"{system_prompt}\n\n## Podcast Production Mode\n{system_addendum}"
+            )
+
+        messages: list[dict] = [{"role": "user", "content": user_prompt}]
+
+        for _ in range(max_iterations):
+            response = await self._client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                system=[{
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+                tools=TOOLS,
+                messages=messages,
+            )
+
+            assistant_content = []
+            for block in response.content:
+                if block.type == "text":
+                    assistant_content.append({"type": "text", "text": block.text})
+                elif block.type == "tool_use":
+                    assistant_content.append({
+                        "type": "tool_use", "id": block.id,
+                        "name": block.name, "input": block.input,
+                    })
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            if response.stop_reason == "end_turn":
+                text_parts = [b.text for b in response.content if b.type == "text"]
+                return "\n".join(text_parts) if text_parts else "(no response)"
+
+            if response.stop_reason == "tool_use":
+                tool_results = []
+                for block in response.content:
+                    if block.type == "tool_use":
+                        result = await self._execute_tool(block.name, block.input)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result,
+                        })
+                messages.append({"role": "user", "content": tool_results})
+            else:
+                text_parts = [b.text for b in response.content if b.type == "text"]
+                return "\n".join(text_parts) if text_parts else "(unexpected stop)"
+
+        raise RuntimeError(
+            f"Skipper.run_once exceeded {max_iterations} tool iterations"
+        )
 
     async def chat(self, user_message: str) -> str:
         """Send a message and return the assistant's text response.

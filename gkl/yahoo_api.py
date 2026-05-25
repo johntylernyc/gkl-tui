@@ -44,6 +44,13 @@ class Matchup:
     winner_team_key: str
     team_a: TeamStats
     team_b: TeamStats
+    # Yahoo's authoritative per-category winner: stat_id -> team_key (winner)
+    # or "" for tied categories. Populated only for postevent matchups; left
+    # empty for preevent/midevent (Yahoo omits the field while the matchup
+    # is still live). Use this in preference to rounding-prone local
+    # comparisons (e.g. AVG ties where both display .255 but the underlying
+    # H/AB differs).
+    stat_winners: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -88,6 +95,35 @@ class PlayerStats:
     stats: dict[str, str] = field(default_factory=dict)  # stat_id -> value
     draft_cost: str = ""  # auction draft cost if available
     selected_position: str = ""  # roster slot (e.g. "SS", "BN", "IL", "NA")
+
+
+def _parse_stat_winners(raw: object) -> dict[str, str]:
+    """Parse Yahoo's matchup `stat_winners` array into {stat_id: team_key}.
+
+    Yahoo returns a list of `{"stat_winner": {"stat_id": "...",
+    "winner_team_key": "..."}}` entries, with `is_tied: 1` instead of a
+    winner_team_key for tied categories. Tied categories are stored as
+    empty string so callers can distinguish "tied" from "not yet decided"
+    (missing key, e.g. preevent matchups where Yahoo omits the field).
+    """
+    out: dict[str, str] = {}
+    if not isinstance(raw, list):
+        return out
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        sw = entry.get("stat_winner") if "stat_winner" in entry else entry
+        if not isinstance(sw, dict):
+            continue
+        sid = sw.get("stat_id")
+        if sid is None:
+            continue
+        sid = str(sid)
+        if sw.get("is_tied"):
+            out[sid] = ""
+        else:
+            out[sid] = sw.get("winner_team_key", "")
+    return out
 
 
 class YahooFantasyAPI:
@@ -695,6 +731,7 @@ class YahooFantasyAPI:
                         winner_team_key=m.get("winner_team_key", ""),
                         team_a=teams[0],
                         team_b=teams[1],
+                        stat_winners=_parse_stat_winners(m.get("stat_winners")),
                     ))
         except (KeyError, IndexError, TypeError):
             pass
