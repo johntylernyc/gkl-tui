@@ -303,6 +303,37 @@ def who_wins(a_val: str, b_val: str, sort_order: str) -> str:
     return "b"
 
 
+def official_category_winner(matchup, cat: StatCategory) -> str:
+    """Per-category winner with Yahoo `stat_winners` as the source of truth.
+
+    Yahoo's `stat_winners` reflects the official decision at full precision
+    AND league rules a value comparison can't see — the weekly innings
+    minimum forfeits every pitching category to the opponent regardless of
+    the raw ratios, and rounded display values (.25510 vs .25531 both show
+    ".255") hide real winners. Recomputing from `matchup.team_x.stats` gets
+    those matchups wrong; always prefer the official record.
+
+    Falls back to `who_wins()` on the display values only when Yahoo hasn't
+    decided yet (preevent/midevent matchups, where `stat_winners` is empty).
+
+    Returns "a", "b", or "tie".
+    """
+    if matchup.stat_winners:
+        decision = matchup.stat_winners.get(cat.stat_id)
+        if decision is not None:
+            if decision == "":
+                return "tie"
+            if decision == matchup.team_a.team_key:
+                return "a"
+            if decision == matchup.team_b.team_key:
+                return "b"
+    return who_wins(
+        matchup.team_a.stats.get(cat.stat_id, "0"),
+        matchup.team_b.stats.get(cat.stat_id, "0"),
+        cat.sort_order,
+    )
+
+
 @dataclass
 class H2HResult:
     """Result of one team vs another across all categories."""

@@ -20,7 +20,11 @@ from gkl.nextgenpodcast.scriptcraft import run_stage
 from gkl.nextgenpodcast.showstate import parse_grades, parse_plants
 
 
-_SECTION_PAT = re.compile(r"^\*\*([A-Z][A-Z0-9 /-]+)\*\*\s*$")
+# The prompt asks for `**SECTION NAME**` lines, but models drift to
+# `## SECTION NAME` markdown headers; accept both so the pipeline still
+# gets the caller spec, grades, and variety history instead of silently
+# falling back to defaults.
+_SECTION_PAT = re.compile(r"^(?:\*\*([A-Z][A-Z0-9 /-]+)\*\*|#{1,4}\s+([A-Z][A-Z0-9 /-]+))\s*$")
 
 # CALLER: <name> from <town> | voice: <voice_id> | <persona>
 _CALLER_SPEC_PAT = re.compile(
@@ -43,7 +47,7 @@ def split_rundown_sections(rundown: str) -> dict[str, str]:
     for ln in rundown.splitlines():
         m = _SECTION_PAT.match(ln.strip())
         if m:
-            current = m.group(1).strip()
+            current = (m.group(1) or m.group(2)).strip()
             sections[current] = []
             continue
         if current is not None:

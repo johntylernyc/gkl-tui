@@ -66,6 +66,14 @@ Produce three acts of narrative spine in this exact shape.
   context: result, where it was won (hitting vs pitching, volume vs rate),
   and whether it was a blowout, a nail-biter, or an upset. A listener on
   any team must hear their own matchup.
+- Matchup scores are the OFFICIAL category records exactly as the
+  scoreboard/recap tools print them — copy them verbatim, NEVER recompute
+  a score by comparing raw category values yourself. Official results fold
+  in league rules the raw numbers can't show: full-precision tiebreaks,
+  and the weekly innings minimum forfeiting pitching categories to the
+  opponent. When the recap flags a category as "awarded on league rules,"
+  that IS the story (a team that ducked the innings floor turned a close
+  week into a blowout) — tell it; don't "correct" the score.
 - Flag the 1-2 team-level stories of the week: the biggest upset, a
   transaction the league is reacting to, a result that moved the playoff
   race. Team-level only — individual-player superlatives belong to Act 2's
@@ -117,6 +125,10 @@ the CATEGORY RECORD, ranked by win percentage. Use get_h2h_standings.
   within reach), and the FIELD (needs a miracle). Name every bubble team.
   Quote category-record win percentages and the gap to the cutline in
   category wins.
+- Quote seeds, records, and win percentages EXACTLY as get_h2h_standings
+  prints them — never re-rank, re-total, or blend in a partial in-progress
+  week. The lead-story framing must match the official seeding: a team
+  holding the last playoff spot is IN the playoffs, not outside them.
 - Layer momentum: which bubble teams are heating up or cooling off over
   the last few weeks (the data pack's momentum table is ground truth).
 - Note remaining-schedule texture for 2-3 bubble teams where it matters:
@@ -460,7 +472,11 @@ season one; never attach a team's category total to a player; never
 assert a hard ordinal across a flagged near-tie ("neck and neck" instead);
 category-record leadership is by WIN PERCENTAGE, not raw wins; the
 playoff cutline is about the OFFICIAL head-to-head standings, not roto
-rank.
+rank. Matchup scorelines and playoff seeds come from the DATA SUMMARY's
+official sections verbatim — when the story spine and the data summary
+disagree on a score or a seed, the data summary wins (official results
+include league rules like the weekly innings minimum, which the spine's
+narrative may have missed).
 
 **Pronunciation — written for the ear**
 
@@ -585,11 +601,27 @@ input format (`INTRO`, `ACT 1`, `BUMPER 1`, `ACT 2`, `CALL-IN`,
 `BUMPER 2`, `ACT 3` headers, with `HAWK: `/`WEBB: `/`ANNOUNCER: `/
 `CALLER: ` lines and any `[bell]` cue preserved exactly, no preamble).
 Preserve Sid's INTRO and BUMPER blocks and his CALL-IN intro verbatim
-unless they carry a factual claim to correct — they rarely do.
+unless they carry a factual claim to correct — the marquee usually
+carries the lead story's numbers and standings framing, so check it as
+strictly as any host line.
 
 **Verification rules**
 
-1. Check every number, rank, record, score, and named factual claim.
+1. Check every number, rank, record, score, and named factual claim — in
+   EVERY block, including Sid's INTRO marquee and BUMPER teases.
+1b. Matchup scorelines ("thirteen-four-one", "edged ten-seven-one")
+   verify against the data pack's matchup-results section, which is
+   OFFICIAL — it already folds in league rules like the weekly innings
+   minimum forfeiting pitching categories, so a score that looks wrong
+   against the raw category values is still the score. The story spine
+   is NOT a source for scores or seeds: where spine and data pack
+   disagree, the data pack wins. Rewrite any framing built on a wrong
+   score (a 13-4-1 is not a "coin flip"; a forfeit-inflated blowout is
+   its own story).
+1c. Internal consistency: the INTRO marquee, Act 1 framing, and bumpers
+   must agree with the standings facts Act 3 states. A team cannot be
+   "outside the playoffs" in the marquee and "holding the eighth seed"
+   in Act 3 — fix whichever end contradicts the official standings.
 2. Weekly player-stat claims verify against the "Per-player performance"
    section. Trend/season claims layered on a weekly line verify against
    the season/last-30 form table. Team category-rank color verifies
@@ -604,7 +636,8 @@ unless they carry a factual claim to correct — they rarely do.
    free-agent picks against the FA list (not listed = not free — strip or
    substitute); trade pairings against the roto/category data; look-backs
    against the Historical adds section including the DROPPED case.
-4. THE RACE (Act 3) claims:
+4. THE RACE claims — anywhere standings, seeds, or the cutline are
+   referenced (marquee, Act 1 color, bumpers, Act 3):
    a. Playoff seeds, category records, and win percentages verify against
       the "Official head-to-head standings" section. The cutline is
       between seed {playoff_spots} and seed {playoff_spots}+1.

@@ -14,8 +14,8 @@ from gkl.yahoo_api import (
     Transaction,
 )
 from gkl.stats import (
-    who_wins, compute_roto, simulate_h2h, compute_power_rankings,
-    SGPCalculator,
+    who_wins, official_category_winner, compute_roto, simulate_h2h,
+    compute_power_rankings, SGPCalculator,
 )
 from gkl.statcast import (
     lookup_mlbam_id, get_batter_statcast, get_pitcher_statcast,
@@ -1002,8 +1002,13 @@ class Skipper:
             all_matchups.extend(week_matchups)
 
         # Tally records: team_key -> {wins, losses, ties, cat_wins, cat_losses, cat_ties}
+        # Only completed (postevent) matchups count — they carry Yahoo's
+        # official stat_winners; an in-progress week would pollute the
+        # official standings with partial, unofficial category results.
         records: dict[str, dict] = {}
         for m in all_matchups:
+            if m.status != "postevent":
+                continue
             for tk in (m.team_a.team_key, m.team_b.team_key):
                 if tk not in records:
                     records[tk] = {
@@ -1018,14 +1023,11 @@ class Skipper:
             records[b.team_key]["name"] = b.name
             records[b.team_key]["manager"] = b.manager
 
-            # Count category wins for this matchup
+            # Count category wins for this matchup (official Yahoo winners —
+            # honors full-precision comparisons and innings-minimum forfeits)
             a_cat_w, b_cat_w, cat_ties = 0, 0, 0
             for c in scored:
-                result = who_wins(
-                    a.stats.get(c.stat_id, "0"),
-                    b.stats.get(c.stat_id, "0"),
-                    c.sort_order,
-                )
+                result = official_category_winner(m, c)
                 if result == "a":
                     a_cat_w += 1
                 elif result == "b":
@@ -1052,23 +1054,37 @@ class Skipper:
                 records[a.team_key]["ties"] += 1
                 records[b.team_key]["ties"] += 1
 
-        # Sort by category record — the official league standings metric
+        # Rank by category-record WIN PERCENTAGE (ties count half) — the
+        # official league standings metric. Raw category wins would misrank
+        # teams whose tie counts differ.
+        def _pct(r: dict) -> float:
+            games = r["cat_wins"] + r["cat_losses"] + r["cat_ties"]
+            return (r["cat_wins"] + 0.5 * r["cat_ties"]) / games if games else 0.0
+
         sorted_teams = sorted(
-            records.items(),
-            key=lambda x: (x[1]["cat_wins"], -x[1]["cat_losses"]),
-            reverse=True,
+            records.items(), key=lambda x: _pct(x[1]), reverse=True,
         )
 
-        lines = [f"H2H Standings through Week {current}:", ""]
-        lines.append("  (Ranked by category record — the official league standings)")
-        lines.append("Rank | Team | Manager | Cat Record (W-L-T) | Matchup Record (W-L-T)")
+        through = max(
+            (m.week for m in all_matchups if m.status == "postevent"),
+            default=current,
+        )
+        lines = [f"H2H Standings through Week {through} (completed weeks only):", ""]
+        lines.append(
+            "  (Ranked by category-record win percentage, ties = half — "
+            "the official league standings)"
+        )
+        lines.append(
+            "Rank | Team | Manager | Cat Record (W-L-T) | Win Pct | "
+            "Matchup Record (W-L-T)"
+        )
         lines.append("-" * 75)
         for rank, (_, r) in enumerate(sorted_teams, 1):
             cat_record = f"{r['cat_wins']}-{r['cat_losses']}-{r['cat_ties']}"
             matchup_record = f"{r['wins']}-{r['losses']}-{r['ties']}"
             lines.append(
                 f"{rank}. {r['name']} | {r['manager']} | "
-                f"{cat_record} | {matchup_record}"
+                f"{cat_record} | {_pct(r):.3f} | {matchup_record}"
             )
         return "\n".join(lines)
 
@@ -1149,14 +1165,10 @@ class Skipper:
             for m in weekly_matchups.get(w, []):
                 a, b = m.team_a, m.team_b
 
-                # Determine actual winner from category comparison
+                # Determine actual winner (official Yahoo category winners)
                 a_cat_w, b_cat_w = 0, 0
                 for c in scored:
-                    result = who_wins(
-                        a.stats.get(c.stat_id, "0"),
-                        b.stats.get(c.stat_id, "0"),
-                        c.sort_order,
-                    )
+                    result = official_category_winner(m, c)
                     if result == "a":
                         a_cat_w += 1
                     elif result == "b":
@@ -1382,9 +1394,12 @@ class Skipper:
             )
             all_week_matchups.extend(wm)
 
-        # Compute cumulative H2H records
+        # Compute cumulative H2H records (completed matchups only — those
+        # carry Yahoo's official stat_winners)
         h2h_records: dict[str, dict] = {}
         for m in all_week_matchups:
+            if m.status != "postevent":
+                continue
             a, b = m.team_a, m.team_b
             for tk in (a.team_key, b.team_key):
                 if tk not in h2h_records:
@@ -1400,11 +1415,7 @@ class Skipper:
 
             a_cat_w, b_cat_w, cat_t = 0, 0, 0
             for c in scored:
-                result = who_wins(
-                    a.stats.get(c.stat_id, "0"),
-                    b.stats.get(c.stat_id, "0"),
-                    c.sort_order,
-                )
+                result = official_category_winner(m, c)
                 if result == "a":
                     a_cat_w += 1
                 elif result == "b":
@@ -1427,11 +1438,14 @@ class Skipper:
                 h2h_records[a.team_key]["ties"] += 1
                 h2h_records[b.team_key]["ties"] += 1
 
-        # Sort by category record (the official league standings metric)
+        # Rank by category-record WIN PERCENTAGE (ties count half) — the
+        # official league standings metric.
+        def _cat_pct(r: dict) -> float:
+            games = r["cat_wins"] + r["cat_losses"] + r["cat_ties"]
+            return (r["cat_wins"] + 0.5 * r["cat_ties"]) / games if games else 0.0
+
         h2h_sorted = sorted(
-            h2h_records.values(),
-            key=lambda r: (r["cat_wins"], -r["cat_losses"]),
-            reverse=True,
+            h2h_records.values(), key=_cat_pct, reverse=True,
         )
 
         # ── Section 1: H2H Matchup Results ──
@@ -1441,19 +1455,24 @@ class Skipper:
             a_wins, b_wins, ties = 0, 0, 0
             cat_details = []
             for c in scored:
-                result = who_wins(
-                    a.stats.get(c.stat_id, "0"),
-                    b.stats.get(c.stat_id, "0"),
-                    c.sort_order,
-                )
+                # Official Yahoo winner: full-precision comparisons and
+                # innings-minimum forfeits (a team under the weekly floor
+                # can lose a category despite better raw ratios).
+                result = official_category_winner(m, c)
                 if result == "a":
                     a_wins += 1
                 elif result == "b":
                     b_wins += 1
                 else:
                     ties += 1
-                cat_details.append((c.display_name, a.stats.get(c.stat_id, "-"),
-                                    b.stats.get(c.stat_id, "-"), result))
+                # Flag categories where the official decision contradicts the
+                # raw values (league rules like the weekly innings minimum) —
+                # otherwise the numbers look like they favor the loser.
+                av = a.stats.get(c.stat_id, "-")
+                bv = b.stats.get(c.stat_id, "-")
+                naive = who_wins(av, bv, c.sort_order)
+                forfeit = naive != result and result != "tie"
+                cat_details.append((c.display_name, av, bv, result, forfeit))
 
             margin = abs(a_wins - b_wins)
             total_cats = a_wins + b_wins + ties
@@ -1569,16 +1588,21 @@ class Skipper:
             # Show each category with explicit team attribution so the LLM
             # can't mis-attribute stats (e.g., "ERA 1.25 ← 4.14" is too
             # ambiguous — use "ERA: Mary's Little Lambs 1.25 (W) vs The Revs. 4.14").
-            for name, av, bv, r in mr["cat_details"]:
+            for name, av, bv, r, forfeit in mr["cat_details"]:
                 if r == "a":
                     a_tag, b_tag = "(W)", "(L)"
                 elif r == "b":
                     a_tag, b_tag = "(L)", "(W)"
                 else:
                     a_tag = b_tag = "(T)"
+                note = (
+                    "  [official Yahoo result — awarded on league rules "
+                    "(e.g. weekly innings minimum), NOT the raw values]"
+                    if forfeit else ""
+                )
                 lines.append(
                     f"    {name}: {mr['team_a']} {av} {a_tag} vs "
-                    f"{mr['team_b']} {bv} {b_tag}"
+                    f"{mr['team_b']} {bv} {b_tag}{note}"
                 )
         lines.append("")
 
@@ -1602,13 +1626,16 @@ class Skipper:
 
         # H2H standings — category record is the official standings metric
         lines.append(f"═══ H2H STANDINGS (through Week {recap_week}) ═══")
-        lines.append("  (Ranked by category record — the official league standings)")
+        lines.append(
+            "  (Ranked by category-record win percentage, ties = half — "
+            "the official league standings)"
+        )
         for i, r in enumerate(h2h_sorted, 1):
             cat_record = f"{r['cat_wins']}-{r['cat_losses']}-{r['cat_ties']}"
             matchup_record = f"{r['wins']}-{r['losses']}-{r['ties']}"
             lines.append(
                 f"  {i}. {r['name']} ({r['manager']}) — "
-                f"{cat_record} (matchups: {matchup_record})"
+                f"{cat_record}, {_cat_pct(r):.3f} (matchups: {matchup_record})"
             )
         lines.append("")
 

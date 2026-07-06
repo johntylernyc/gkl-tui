@@ -520,6 +520,20 @@ class TestShowrunner:
         r = Rundown(text=text, sections=split_rundown_sections(text))
         assert r.caller() is None
 
+    def test_split_sections_accepts_markdown_headers(self):
+        # Models drift from **SECTION** to ## SECTION — both must parse.
+        text = (
+            "## COLD OPEN\nStyle: The parallel.\n\n"
+            "## CALL-IN\n"
+            "CALLER: Dennis from Sheboygan | voice: gs0tAILX | folksy\n\n"
+            "## SIGN-OFF\nHawk closes on the caller.\n"
+        )
+        r = Rundown(text=text, sections=split_rundown_sections(text))
+        assert r.cold_open.startswith("Style: The parallel")
+        assert r.sign_off.startswith("Hawk closes")
+        caller = r.caller()
+        assert caller is not None and caller.display == "Dennis from Sheboygan"
+
 
 class TestCallerVoices:
     def test_resolve_prefers_valid_fresh_pick(self):

@@ -31,6 +31,7 @@ from gkl.nextgenpodcast.assets import asset_path as nextgen_asset_path
 from gkl.nextgenpodcast.dialogue import (
     render_announcer_segments, render_call_in, render_episode_voices,
 )
+from gkl.nextgenpodcast.factguard import find_scoreline_violations
 from gkl.nextgenpodcast.scriptcraft import (
     normalize_script_for_tts, parse_script, run_stage,
 )
@@ -232,6 +233,7 @@ async def _run_script_chain_and_render(
     data_root: Path,
     assets_root: Path,
     log,
+    validate=None,
 ) -> EpisodeResult:
     speakers = config.cast.speakers()
 
@@ -284,6 +286,44 @@ async def _run_script_chain_and_render(
     log("[7/8] Edit…")
     final_raw = await run_stage(spec.artifact, "edit", tokens, max_tokens=8192)
     final = _parse(final_raw)
+
+    # Deterministic scoreline backstop: every spoken record tuple in the
+    # final script must match an official record in the data pack. On a
+    # miss, run one corrective fact-check pass with the specific flags,
+    # then fail the run rather than render a wrong number to air.
+    if validate is not None:
+        problems = validate(final.as_markdown())
+        if problems:
+            log(
+                f"       validator: {len(problems)} scoreline problem(s) — "
+                "running corrective fact-check pass"
+            )
+            flags = (
+                "\n\nVALIDATOR FLAGS — these spoken scorelines failed "
+                "deterministic verification against the official records. "
+                "Correct each to the official matchup/standings record from "
+                "the data above; if the line's framing depended on the wrong "
+                "score (e.g. calling a blowout a coin-flip), rewrite the "
+                "framing to fit the real number:\n"
+                + "\n".join(f"- {p}" for p in problems)
+            )
+            corrected_raw = await run_stage(
+                spec.artifact, "fact_check",
+                {
+                    **tokens,
+                    "data_summary": tokens["checker_data_summary"] + flags,
+                    "draft_script": final.as_markdown(),
+                },
+                max_tokens=8192,
+            )
+            final = _parse(corrected_raw)
+            remaining = validate(final.as_markdown())
+            if remaining:
+                raise RuntimeError(
+                    "script failed scoreline validation after the corrective "
+                    "pass:\n" + "\n".join(remaining)
+                )
+
     (episode_dir / "script.md").write_text(final.as_markdown())
     log(f"       final: {final.total_turns()} turns, {final.total_words()} words")
 
@@ -473,12 +513,23 @@ async def generate_weekly_episode(
         "caller_voices": caller_voices_block(),
     })
 
+    pack_dict = json.loads((episode_dir / "datapack.json").read_text())
+    scored_n = sum(
+        1 for c in pack_dict["categories"] if not c.get("is_only_display")
+    )
+
+    def _validate(script_md: str) -> list[str]:
+        return find_scoreline_violations(
+            script_md, pack_dict,
+            scored_categories=scored_n, num_teams=len(pack_dict["teams"]),
+        )
+
     return await _run_script_chain_and_render(
         spec=spec, tokens=tokens, episode_dir=episode_dir,
         episode_slug=episode_slug, week_for_state=target_week,
         season=league.season, config=config, state=state,
         state_path=state_path, data_root=data_root,
-        assets_root=assets_root, log=log,
+        assets_root=assets_root, log=log, validate=_validate,
     )
 
 

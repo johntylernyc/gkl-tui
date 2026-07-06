@@ -21,7 +21,8 @@ from gkl.yahoo_api import (
     YahooFantasyAPI,
 )
 from gkl.stats import (
-    compute_power_rankings, compute_roto, simulate_h2h, who_wins,
+    compute_power_rankings, compute_roto, official_category_winner,
+    simulate_h2h,
 )
 from gkl.mlb_api import MLBGame, get_mlb_scoreboard
 from gkl.skipper import _availability_tag as availability_tag
@@ -325,26 +326,8 @@ def _matchup_record(m: Matchup, categories: list[StatCategory]) -> MatchupRecord
 def _category_winner(
     m: Matchup, cat: StatCategory, a_val: str, b_val: str,
 ) -> str:
-    """Per-category winner with Yahoo `stat_winners` as the source of truth.
-
-    Yahoo's `stat_winners` reflects the official comparison at full precision
-    (e.g. .25510 vs .25531 both display as ".255" but Yahoo's underlying
-    H/AB tiebreaker still picks a winner). Fall back to `who_wins()` on
-    rounded display values only when Yahoo hasn't decided yet — e.g. preevent
-    or midevent matchups where `stat_winners` is empty.
-
-    Returns "a", "b", or "tie".
-    """
-    if m.stat_winners:
-        decision = m.stat_winners.get(cat.stat_id)
-        if decision is not None:
-            if decision == "":
-                return "tie"
-            if decision == m.team_a.team_key:
-                return "a"
-            if decision == m.team_b.team_key:
-                return "b"
-    return who_wins(a_val, b_val, cat.sort_order)
+    """Per-category winner — see `gkl.stats.official_category_winner`."""
+    return official_category_winner(m, cat)
 
 
 def _h2h_records(
