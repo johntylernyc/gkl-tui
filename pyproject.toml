@@ -29,6 +29,7 @@ dev = [
 gkl = "gkl.app:main"
 gkl-web = "gkl.web.server:main"
 gkl-podcast = "gkl.podcast.cli:main"
+gkl-nextgenpodcast = "gkl.nextgenpodcast.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["gkl"]

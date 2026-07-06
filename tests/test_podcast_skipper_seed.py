@@ -108,6 +108,22 @@ def test_weekly_recap_segment_artifact_parses() -> None:
         assert tok in prompt.user_prompt, f"missing token {tok} in user prompt"
 
 
+def test_weekly_recap_skipper_seed_describes_2_of_3_act3_selection() -> None:
+    """Phase 2 system addendum must instruct on the new 2-of-3 Act 3 shape."""
+    prompt = load_segment_prompt(DEFAULT_SEGMENT_ARTIFACT)
+    body_lc = prompt.system_addendum.lower()
+    # All three candidate topics named
+    assert "free-agent" in body_lc or "free agent" in body_lc
+    assert "trade pairing" in body_lc
+    assert "look-back" in body_lc
+    # And the always-on week-ahead beat
+    assert "week-ahead" in body_lc or "week ahead" in body_lc
+    # Selection-by-material-strength is the new instruction
+    assert "material strength" in body_lc, (
+        "Phase 2 addendum missing material-strength selection criterion"
+    )
+
+
 # -- Availability tag (lives in skipper.py, used by datapack + podcast) -----
 
 def _tag_for(selected_position: str, position: str = "OF") -> str:

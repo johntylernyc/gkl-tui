@@ -7,15 +7,18 @@ Weekly Recap). Writes all intermediate artifacts + the final mp3 under
 Intermediate artifacts (kept for debugging + refinement):
 - `datapack.json` (Phase 1)
 - `suggested-topics.md` (Phase 2)
-- `act_{n}_source.txt`, `act_{n}_instructions.txt` (Phase 3)
+- `draft-script.md`, `fact-checked-script.md`, `script.md` (Phase 3a/b/c)
+- `script-tts.md` (TTS-normalized final)
 - `act_{n}.mp3` (Phase 4)
 - `final.mp3` (Phase 6)
+- `takeaways.md` (Phase 3d — feeds future episodes' continuity)
 - `episode.json` (this module; metadata summary)
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,13 +30,78 @@ from gkl.podcast.datapack import (
     build_weekly_recap_datapack, datapack_dir,
 )
 from gkl.podcast.mixer import mix_episode
-from gkl.podcast.script_writer import normalize_script_for_tts, write_script
+from gkl.podcast.script_writer import (
+    normalize_script_for_tts, write_script, write_takeaways,
+)
 from gkl.podcast.segments.weekly_recap import (
     GUEST_VOICE_ID, HOST_VOICE_ID, SEGMENT_SLUG, WEEKLY_RECAP_RECIPE,
 )
 from gkl.podcast.skipper_seed import seed_weekly_recap
 from gkl.podcast.voice import render_episode_voices
 from gkl.yahoo_api import League, StatCategory, YahooFantasyAPI
+
+
+# How many recent episodes' takeaways to thread into the draft writer for
+# continuity. Matches the spec ("last 4-6 weeks").
+PRIOR_TAKEAWAYS_WINDOW = 6
+
+
+_EPISODE_DIR_PAT = re.compile(r"^(\d{4})-w(\d{2})$")
+
+
+def load_prior_takeaways(
+    league_data_dir: Path,
+    season: str,
+    current_target_week: int,
+    *,
+    window: int = PRIOR_TAKEAWAYS_WINDOW,
+) -> str:
+    """Read the previous `window` episodes' `takeaways.md` for continuity.
+
+    Scans `league_data_dir` for episode subdirectories matching
+    `<season>-wNN`, takes the up-to-`window` most recent that have a
+    non-empty `takeaways.md`, and returns their content concatenated with
+    week-N labels (oldest first, so the model reads a chronological
+    record). Excludes the current target week (allows safe re-runs).
+
+    Returns an empty string when nothing is found — the caller is expected
+    to translate that into the draft prompt's "(no prior episodes)"
+    sentinel via the script writer's helper.
+    """
+    if not league_data_dir.is_dir():
+        return ""
+
+    candidates: list[tuple[int, Path]] = []
+    for child in league_data_dir.iterdir():
+        if not child.is_dir():
+            continue
+        m = _EPISODE_DIR_PAT.match(child.name)
+        if not m:
+            continue
+        if m.group(1) != season:
+            continue
+        week_n = int(m.group(2))
+        if week_n >= current_target_week:
+            continue
+        takeaways_path = child / "takeaways.md"
+        if not takeaways_path.exists():
+            continue
+        content = takeaways_path.read_text().strip()
+        if not content:
+            continue
+        candidates.append((week_n, takeaways_path))
+
+    candidates.sort(key=lambda x: x[0])  # oldest first
+    if not candidates:
+        return ""
+    selected = candidates[-window:]  # keep the most-recent N, oldest first
+
+    chunks: list[str] = []
+    for week_n, path in selected:
+        chunks.append(
+            f"--- Episode: Week {week_n} ---\n\n{path.read_text().strip()}"
+        )
+    return "\n\n".join(chunks)
 
 
 # ---------- Result schema ----------
@@ -53,6 +121,8 @@ class EpisodeResult:
     ad_slugs: list[str]
     generated_at: str
     char_cost_estimate: int = 0  # rough count of chars sent to ElevenLabs
+    takeaways_path: Path | None = None
+    prior_episodes_used: int = 0
 
     def write_manifest(self) -> None:
         """Persist a summary of this episode as `episode.json`."""
@@ -169,10 +239,27 @@ async def generate_weekly_recap_episode(
     suggested_topics_path.write_text(suggested_topics)
     log(f"       -> {_rel(suggested_topics_path)}")
 
+    # Load prior episodes' takeaways so the draft writer can call back to
+    # past topics / position changes. Empty string when there's nothing yet.
+    league_data_dir = data_root / "podcast" / league.league_key
+    prior_takeaways = load_prior_takeaways(
+        league_data_dir, league.season, target_week,
+    )
+    if prior_takeaways:
+        prior_count = prior_takeaways.count("--- Episode: Week")
+        log(
+            f"       continuity: loaded {prior_count} prior episode(s) "
+            "of takeaways"
+        )
+    else:
+        log("       continuity: no prior episodes (skipping callbacks)")
+
     # Phase 3 — three Opus 4.6 passes: draft → fact-check → edit
     log("[3/6] Writing dialogue script (Opus 4.6, three passes)…")
     log("       3a — drafting op-ed dialogue…")
-    scripts = await write_script(datapack, suggested_topics)
+    scripts = await write_script(
+        datapack, suggested_topics, prior_takeaways=prior_takeaways,
+    )
     (episode_dir / "draft-script.md").write_text(scripts.draft.as_markdown())
     log(
         f"       draft -> {_rel(episode_dir / 'draft-script.md')}  "
@@ -192,6 +279,15 @@ async def generate_weekly_recap_episode(
         f"       final -> {_rel(script_path)}  "
         f"({script.total_turns()} turns across 3 acts)"
     )
+
+    # Phase 3d — takeaways for the NEXT episode's continuity. Runs against
+    # the final (un-normalized) script. Persist alongside the other artifacts
+    # so the future-episode loader can pick it up.
+    log("       3d — distilling takeaways for next-episode continuity…")
+    takeaways_md = await write_takeaways(script, datapack)
+    takeaways_path = episode_dir / "takeaways.md"
+    takeaways_path.write_text(takeaways_md)
+    log(f"       takeaways -> {_rel(takeaways_path)}")
 
     # Normalize for TTS: expand abbreviations (OBP → on-base percentage,
     # xBA → expected batting average, etc.) so the hosts don't spell out
@@ -235,6 +331,9 @@ async def generate_weekly_recap_episode(
     # incremental cost per episode).
     char_cost = sum(r.char_cost for r in voice_results)
 
+    prior_count = (
+        prior_takeaways.count("--- Episode: Week") if prior_takeaways else 0
+    )
     result = EpisodeResult(
         segment=SEGMENT_SLUG,
         league_key=league.league_key,
@@ -248,6 +347,8 @@ async def generate_weekly_recap_episode(
         ad_slugs=[ad.slug for ad in ads],
         generated_at=datetime.now(tz=timezone.utc).isoformat(),
         char_cost_estimate=char_cost,
+        takeaways_path=takeaways_path,
+        prior_episodes_used=prior_count,
     )
     result.write_manifest()
     return result

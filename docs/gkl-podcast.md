@@ -13,7 +13,7 @@ Requirements:
 
 We think this will expand over time to have all sorts of different versions of the podcast, we can think of each of these versions as "Segments". Each segment will have a general theme and cadence at which it runs. For example: 
 
-- Weekly recap: a segment that runs on Mondays that recaps the matchups from the week prior. The podcast quickly summarizes each matchup's results, and then jumps into the big stories from that week. Which teams surged or tanked, standout performances from individual teams or players, key transactions, and a brief commentary on the week ahead and what to expect. Available once weekly on Monday 7am est, 8-10 minutes in length. 
+- Weekly recap: a segment that runs on Mondays that recaps the matchups from the week prior. The podcast quickly summarizes each matchup's results, and then jumps into the big stories from that week. Which teams surged or tanked, standout performances from individual teams or players, key transactions, and a brief commentary on the week ahead and what to expect. Available once weekly on Monday 7am est, ~13 minutes in length (never over 14). 
 - Daily dive: a daily episode that goes over yesterday's team performances and each of their matchups in that week of the fantasy season. Available daily at 8am est, 4-6 minutes in length.
 - League standings: a zoomed out view of the league, and each team's roto, power rankings, and official h2h standings. How things have changed week-over-week. A discussion of specific manager's and their team's needs or strengths. And, from week 15 forward, commentary on the emerging playoff picture for that league. Available once weekly on Tuesday at 7am est, 8-10 minutes in length.
 - The wire: a discussion of available free agents and potential rosters they could add value. Available once weekly on Sunday night at 5pm est, 4-6 minutes in length. 
@@ -628,3 +628,351 @@ waiver wire.
 | 79 | Update production editor prompt (balance audit) | ✅ Done |
 | 80 | Unit tests for FA formatter + data summary | ✅ Done |
 | 81 | **Live regeneration of Week 8 with the new format** | ⬜ Ready — delete `data/podcast/<league>/2026-w08` and re-run `gkl-podcast weekly-recap --week 8` |
+
+### Weekly Recap iteration — signature greeting, continuity, momentum, Act 3 rotation (2026-05-25)
+
+**Status:** Implemented on `feature/gkl-podcast`. 193 podcast tests passing.
+
+Four user-requested adjustments landed in one pass:
+
+1. HOST now greets GUEST as "My Guy" in the Act 1 cold open as a
+   signature opener.
+2. Per-episode **takeaways** artifact + prior-episode continuity loader
+   so the script can call back to past topics and acknowledge
+   position-changes.
+3. **Recent-form momentum** in the data pack (last-5-played-weeks
+   record + cat record) so Act 2 can talk heaters and slumps, with
+   fall/rise predictions weighted by momentum, not just season roto.
+4. **Act 3 restructured** to two rotating topics + an always-present
+   week-ahead. Rotating pool: FA picks, trade pairings, look-back on
+   adds from 3-4 weeks ago. Skipper seed picks the two with the
+   strongest material this week.
+
+A safety commit (`813bbd9`) captured the entire pre-iteration podcast
+state — including all asset library mp3s — as a rollback point before
+any work on this iteration.
+
+**Phase A — Datapack expansion + signature greeting**
+
+- New dataclasses in `gkl/podcast/datapack.py`:
+  - `TeamMomentum` — per-team W-L-T + category record over the last
+    five played weeks. Auto-shortens when the season hasn't played
+    five weeks yet.
+  - `HistoricalAdd` — players added in weeks `target_week - 4` and
+    `target_week - 3`, joined with current-roster season + last-30
+    stats. Drops are still surfaced (`still_on_roster=False`) since
+    "they cut him after two weeks" is itself a story.
+- New helpers `_team_momentum()` and `_historical_adds()`; both pure
+  derivations from data already fetched (no new Yahoo calls).
+- `_historical_adds` prefers Yahoo's explicit `to_team_key` when
+  present and falls back to team-name lookup for older payloads.
+- New `format_team_momentum()` and `format_historical_adds()` in
+  `source_builder.py`. Wired into `build_data_summary()` so both the
+  draft writer and the fact-checker see momentum + historical adds.
+- Draft prompt Act 1 cold-open updated: HOST's opening line must
+  address GUEST as "my guy" (with an updated worked example in the
+  Format section).
+
+**Phase B — Per-episode takeaways + prior-episode continuity**
+
+- New Phase 3d `write_takeaways()` Opus 4.6 call in `script_writer.py`.
+  Reads the final (un-normalized) script + episode metadata only —
+  **never the data pack** — so it can only summarize what was SAID,
+  not introduce new facts.
+- Takeaways are persisted to `<episode_dir>/takeaways.md`. Schema is
+  six fixed H2 sections: Topics covered, Takes worth revisiting,
+  Free-agent picks endorsed, Trade pairings discussed, Look-back
+  call-outs, Forward commitments.
+- New `load_prior_takeaways()` in `pipeline.py` scans the per-league
+  data dir for the previous 4-6 episodes (configurable via
+  `PRIOR_TAKEAWAYS_WINDOW = 6`) and concatenates their takeaways
+  oldest-first with `--- Episode: Week N ---` separators.
+- Excludes the current target week from the load (re-runs are safe).
+- Filters to the active season (no cross-season leakage).
+- Skips episode dirs that have no `takeaways.md` (mid-build state) or
+  whose file is empty.
+- Draft prompt grew a new **`{prior_takeaways}` token** in the user
+  prompt and a "Continuity — refer to prior episodes when relevant"
+  section in the system prompt. Rules cover callbacks on supported
+  takes, explicit position-changes on contradicted ones, no repeating
+  the same FA pick if the player is no longer free, no manufactured
+  continuity, and ~1-2 callback beats per act maximum.
+- `NO_PRIOR_EPISODES = "(no prior episodes)"` sentinel rendered when
+  the loader returns empty — keys directly off the same string in the
+  draft prompt so the first few post-launch episodes degrade gracefully.
+
+**Phase C — Act 2 momentum deepening**
+
+- Draft prompt Act 2 description rewritten: standings tour now layers
+  recent-form momentum on top of the top-8 / bottom-10 framing.
+  Fall/rise predictions explicitly required to weight recent momentum,
+  not just season-cumulative roto.
+- New fact-checker rule (4a) verifies momentum claims against the
+  data summary's Recent-form section — streak length, cat record, and
+  window length must all match.
+
+**Phase D — Act 3 rotation**
+
+- Phase 2 Skipper seed addendum rewritten. Act 3 now describes three
+  candidate topics (FA picks, trade pairings, look-back on past adds)
+  and instructs Skipper to pick the two with the strongest material
+  this week. Material strength is the primary signal; cross-week
+  variety is a tiebreaker. The week-ahead beat is always present as
+  the third and final block of Act 3.
+- Output shape for Act 3 nailed down: exactly three `### ` blocks
+  — two selected topics from the pool, plus `### Week ahead`.
+  Rejected topic is omitted entirely.
+- Draft prompt Act 3 rewritten to follow the seed's selection (don't
+  manufacture content for the topic that wasn't picked).
+- Fact-checker rule 3 split into three sub-rules: 3a (FA picks),
+  3b (trade pairings — verify cat-gap framing against roto ranks),
+  3c (look-back — verify the (player, team, week) tuple against
+  Historical adds + stats against last-30/season lines, including
+  the DROPPED case).
+- Balance rule generalized — the existing "FA picks fit different
+  teams" rule now covers all three Act 3 topic types: two FA picks
+  on different teams, two trade pairings involving four different
+  teams, two look-back call-outs on different teams.
+
+### Decisions
+
+1. **Continuity feeds takeaways, not raw scripts.** The takeaway doc
+   is a curated summary of topics, takes, FA picks, and forward
+   commitments — not the full dialogue. Cheaper to ship into the
+   draft prompt (4-6 episodes × ~500 tokens) and more structured for
+   the model to reason about ("HOST said X last week — does this
+   week's data support X?"). Per-episode generation cost is one extra
+   Opus 4.6 call, trivial vs the TTS spend.
+2. **Takeaways generator sees only the final script.** The Phase 3d
+   prompt deliberately excludes the data pack so the takeaways doc
+   cannot smuggle in new stat claims. Its only job is to capture
+   what was said.
+3. **Six fixed H2 sections, even when empty.** `(none in this episode)`
+   is required for empty sections rather than omission. Keeps the
+   downstream draft writer's scan logic stable across episodes.
+4. **`PRIOR_TAKEAWAYS_WINDOW = 6` weeks.** Matches the spec ("4-6
+   weeks"). Auto-shortens to whatever exists if fewer episodes have
+   been generated.
+5. **Momentum window = 5 played weeks.** Long enough to mean
+   something, short enough to track recent form. Auto-clamps to
+   `max(1, target_week - 4)` so early-season episodes still get a
+   coherent (if shorter) window.
+6. **Historical adds = exactly weeks `W-4` and `W-3`.** Enough lead
+   time that there's meaningful stat history, recent enough that the
+   add is still episode-fresh. Drops are surfaced with empty stats
+   so the script can frame "cut after two weeks" as its own story.
+7. **Skipper-seed picks the Act 3 rotation, not a deterministic
+   rotation table.** Material strength is the primary driver — a
+   topic only runs when it has genuinely defensible material this
+   week. Avoids running a flat "look-back" segment in early-season
+   episodes where no add has accumulated playing time.
+8. **Format-spec pitfall avoided.** The Phase 3d takeaways prompt
+   uses prose-described H2 structure ("Section 1: `Topics covered`...")
+   instead of a literal code-block example, because the segment-
+   artifact section extractor truncates at any `## ` line in column 0,
+   including ones inside fenced code blocks. Documented inline next
+   to the existing same-issue note on the editor prompt.
+9. **`{prior_takeaways}` only threads into the draft writer.** Fact
+   checker and editor do not get it — their jobs are stat verification
+   and narrative polish, not continuity. Continuity is established
+   before fact-checking, then preserved through the rest of the chain
+   because the dialogue lines aren't restructured at later steps.
+
+### Tasks
+
+| # | Task | Status |
+|---|------|--------|
+| 82 | Add `TeamMomentum` + `_team_momentum()` to `datapack.py` | ✅ Done |
+| 83 | Add `HistoricalAdd` + `_historical_adds()` to `datapack.py` | ✅ Done |
+| 84 | Add `format_team_momentum` + `format_historical_adds` to source builder | ✅ Done |
+| 85 | Wire new sections into `build_data_summary()` | ✅ Done |
+| 86 | Add "My Guy" greeting directive to draft prompt + Format example | ✅ Done |
+| 87 | Add Phase 3d "Takeaways generator" section to segment artifact | ✅ Done |
+| 88 | Implement `write_takeaways()` + `load_takeaways_prompt()` | ✅ Done |
+| 89 | Implement `load_prior_takeaways()` in pipeline.py | ✅ Done |
+| 90 | Thread `prior_takeaways` through `write_draft_script` + orchestrator | ✅ Done |
+| 91 | Add "Continuity — refer to prior episodes" section to draft prompt | ✅ Done |
+| 92 | Rewrite draft Act 2 for momentum framing | ✅ Done |
+| 93 | Add momentum-verification rule (4a) to fact checker | ✅ Done |
+| 94 | Rewrite Phase 2 Skipper seed Act 3 to 2-of-3 + week-ahead | ✅ Done |
+| 95 | Rewrite draft prompt Act 3 to follow seed selection | ✅ Done |
+| 96 | Split fact-checker rule 3 into 3a/3b/3c (FA/trade/look-back) | ✅ Done |
+| 97 | Generalize balance rule across all three Act 3 topic types | ✅ Done |
+| 98 | Unit tests for momentum + historical-adds helpers + formatters | ✅ Done |
+| 99 | Unit tests for `load_prior_takeaways()` loader behavior | ✅ Done |
+| 100 | Unit tests for `write_takeaways` + `write_draft_script` continuity | ✅ Done |
+| 101 | Prompt-content invariant tests (greeting, continuity, momentum, Act 3) | ✅ Done |
+| 102 | **Live regeneration with new format end-to-end** | ⬜ Ready — delete a recent week's `data/podcast/<league>/...` dir and re-run `gkl-podcast weekly-recap --week N` |
+
+### Act reshuffle + new Act 2 rotating pool + stat-layering (2026-06-08)
+
+**Status:** Implemented on `feature/gkl-podcast`. 211 podcast/unit tests
+passing (the one failing test, `slugger-tees` ad length, is pre-existing
+uncommitted ad-copy work unrelated to this change).
+
+**Why:** The Week 11 episode's Act 3 felt stale — all three rotating
+topics (FA picks / trade pairings / look-back) were variations on "here's
+a roster move you should make," so the act always sounded like the hosts
+doing everyone's GM homework. We wanted fresher, league-wide analytical
+angles and richer stat commentary.
+
+**What changed — episode structure (acts reordered):**
+
+- **Act 1** — Scoreboard recap, now strictly **team-level**. Individual
+  player superlatives are deferred to Act 2's Weekly Awards (kills the
+  Act 1 standout ↔ Act 2 award repetition).
+- **Act 2** — NEW: **rotating topics, 2-of-N**, the show's fresh angle.
+  Primary pool (preferred): **Category Kings**, **Weekly Awards**,
+  **Regression Watch**. Occasional pool (only when a move is genuinely
+  glaring): free-agent picks, trade pairings, look-back. The Skipper seed
+  picks the two with the strongest material.
+- **Act 3** — the former Act 2 **standings tour + momentum + fall/rise**,
+  now the finale, with the always-on **week-ahead** moved here to close
+  the show. New arc: recap → fresh angle → big picture + what's next.
+
+**What changed — cross-cutting "stat layering" enrichment:**
+
+- New principle threaded through the seed, draft, and fact-checker:
+  conditionally pair a weekly performance with last-30/season context
+  ONLY when it changes the read (continuing heater vs spike), and layer a
+  manager's **season-long category rank** as color on a weekly category
+  result ("fitting — he's first in steals all year"). Conditional, not
+  automatic — no three-stat bloat.
+
+**What changed — empowering the fact-checker (the priority):**
+
+- `build_data_summary(include_player_stats=True)` now also ships
+  **`format_roster_form`** — season + last-30 lines for every rostered
+  player — so trend/season claims layered on a weekly line are
+  verifiable (previously only the weekly table was present).
+- **`format_category_leaders`** (season-long per-category roto leaders)
+  is now in the base summary — ground truth for Category Kings AND for
+  any "Nth in category" manager color. NOTE: `category_ranks` holds roto
+  POINTS (worst=1, leader=N), so leaders sort DESCENDING — caught and
+  fixed during build (first pass inverted it).
+- **`format_weekly_standouts`** bundles week + last-30 + season for the
+  week's top counting-stat performers — feeds Weekly Awards and the
+  draft writer's stat-layering without shipping the full 12k-token table.
+- The fact-checker now ALSO receives the **Skipper seed suggested-topics**
+  (`{suggested_topics}` token threaded through `fact_check_script` /
+  `write_script`) so it can verify **Statcast** figures behind Regression
+  Watch / award "real vs lucky" calls against what the seed actually
+  pulled — the structured pack doesn't carry Statcast.
+
+**What changed — prompts (`weekly-recap.md`):**
+
+- Three-act overview, Phase 2 seed (act swap + new pool + selection
+  criteria + boundary rules + stat-layering), Phase 3a draft (act swap +
+  rotating-pool guidance + stat-layering + act-boundary traps), Phase 3b
+  fact-checker (renumbered acts; new rules 2a/2b for trend + category
+  color; rule 3 a–f for all six rotating topics incl. Statcast-via-seed),
+  Phase 3c editor (act-boundary repetition audit), Phase 3d takeaways
+  (six sections → four; the three topic-specific sections collapsed into
+  one generalized **`Act 2 segment call-outs`** so the schema is stable
+  across any rotation).
+
+**Decisions:**
+
+1. **Demote, don't delete, FA/trades/look-back.** They stay in the pool
+   as occasional fallbacks the seed runs only when a move is glaring;
+   selection criteria bias hard toward the primary pool so they don't
+   quietly dominate again.
+2. **Targeted multi-window stats, not a full three-window table to the
+   draft writer.** The draft writer gets bundled windows for the beats in
+   play (standouts + category leaders); the heavy form table goes only to
+   the fact-checker. Keeps the draft prompt under the Opus rate limit.
+3. **Statcast verification via the seed, not new fetches.** Rather than
+   fetch Statcast for the whole pack, the fact-checker cross-checks the
+   draft against the seed's already-pulled Statcast numbers. Zero extra
+   API cost; the seed is the Statcast source of record.
+4. **`category_ranks` is roto points (higher=better), not placement.**
+   Documented inline in `format_category_leaders` to prevent the
+   inversion from creeping back.
+5. **Takeaways schema generalized to 4 sections.** One `Act 2 segment
+   call-outs` section with per-topic bullet shapes keeps continuity
+   stable no matter which two rotating topics ran.
+
+### Tasks
+
+| # | Task | Status |
+|---|------|--------|
+| 103 | `format_category_leaders` / `format_weekly_standouts` / `format_roster_form` | ✅ Done |
+| 104 | Wire new sections into `build_data_summary` (lean draft vs full checker) | ✅ Done |
+| 105 | Thread `{suggested_topics}` into `fact_check_script` + `write_script` | ✅ Done |
+| 106 | Reorder acts + new Act 2 pool in three-act overview + Phase 2 seed | ✅ Done |
+| 107 | Rewrite Phase 3a draft (act swap, pool, stat-layering, boundaries) | ✅ Done |
+| 108 | Rewrite Phase 3b fact-checker rules (2a/2b + 3a–f + Statcast via seed) | ✅ Done |
+| 109 | Editor boundary audit + takeaways schema 6→4 sections | ✅ Done |
+| 110 | Formatter unit tests + refreshed prompt-invariant tests | ✅ Done |
+| 111 | **Live regeneration with the reshuffled format end-to-end** | ⬜ Ready — delete a recent week's `data/podcast/<league>/...` dir and re-run `gkl-podcast weekly-recap --week N` |
+
+### Fact-checking hardening from the Week 11 listen (2026-06-08)
+
+**Status:** Implemented on `feature/gkl-podcast`. 219 tests passing (the
+lone failure, `slugger-tees` ad length, is pre-existing uncommitted ad
+work). Driven by the stat errors caught while reviewing the Week 11
+episode — each was root-caused to a pipeline gap, not a one-off model
+slip, and fixed at the source + in the fact-checker.
+
+**Root causes → fixes:**
+
+1. **Weekly vs season power rankings (the big one).** The datapack
+   shipped only SEASON-cumulative power rankings, but Act 1's "best team
+   this week" wants the SINGLE-WEEK all-play. The script quoted season
+   records for weekly claims (Boys of Summer "13-4" where "16-1" was
+   meant) and even gave one team another team's record. The weekly
+   numbers were trivially derivable from `target_week_matchups` (already
+   in the pack) — verified that recomputing reproduces the league's
+   Week-11 table exactly. **Fix:** new `_weekly_power_rankings()` +
+   `DataPack.weekly_power_rankings` field +
+   `format_weekly_power_rankings()`; the data summary now carries BOTH
+   tables, explicitly labeled, with a fact-checker rule (4b) requiring
+   weekly claims be checked against the weekly table.
+2. **"Leads the category record" decided by raw wins, not win%.** A team
+   with the most raw category wins (ShapeShifters 113) was named leader,
+   but win% (with ties) put My Name (112-64-22, .621) ahead.
+   **Fix:** `format_h2h_records` now appends a "Category-record leaders
+   BY WIN PERCENTAGE" line; fact-checker rule 4e + draft guidance.
+3. **Team total attached to a player.** "Bobby Witt's 67 steals" was
+   Steel City's TEAM total; Witt had 23. **Fix:** fact-checker rule 4c +
+   draft "never put a team total on a player" trap.
+4. **Hard ordinal across a roto near-tie.** "Kirby 2nd, Braun 4th, half
+   a point apart" — `compute_roto` is correct, but the order across a
+   0.5-pt gap is fragile and flips on any data drift. **Fix:**
+   `format_standings` flags adjacent teams within 2.0 roto points as
+   "Near-tied… do NOT assert a hard ordinal"; fact-checker rule 4d +
+   draft trap + editor backstop (rule 9, pattern-based since the editor
+   has no data).
+5. **"Owns pitching" with no explicit leadership.** Covered by the
+   category-leaders section (added earlier) + the fact-checker category
+   rules.
+
+**Decisions:**
+
+1. **Weekly PR from matchups, no new fetch.** `target_week_matchups`
+   already carry each team's week stats, so the single-week all-play is
+   computed in-process via the existing `simulate_h2h` /
+   `compute_power_rankings` — zero extra Yahoo calls.
+2. **`compute_roto` is NOT the bug for the near-tie.** Confirmed it's
+   internally consistent (the totals match the per-category sum). The
+   fix is guidance against over-precise ordinals + surfacing margins,
+   not touching the roto math.
+3. **Defense in depth.** Each error class is addressed at THREE layers:
+   the data surfaces the right signal (weekly PR, win% leader, near-tie
+   flag, team-vs-player tables), the draft prompt warns against the
+   trap, and the fact-checker has an explicit verification rule. The
+   editor adds a pattern-based backstop for the one trap (fragile
+   ordinals) it can catch without data.
+
+### Tasks
+
+| # | Task | Status |
+|---|------|--------|
+| 112 | `_weekly_power_rankings()` + `weekly_power_rankings` field + builder wiring | ✅ Done |
+| 113 | `format_weekly_power_rankings` + dual-table labeling in data summary | ✅ Done |
+| 114 | Category-record win% leader in `format_h2h_records` | ✅ Done |
+| 115 | Roto near-tie flagging in `format_standings` | ✅ Done |
+| 116 | Fact-checker rules 4b–4e (weekly PR / player-vs-team / near-tie / win%) | ✅ Done |
+| 117 | Draft "stat-accuracy traps" + seed weekly-PR note + editor ordinal backstop | ✅ Done |
+| 118 | Unit + prompt-invariant tests for all of the above | ✅ Done |
+| 119 | **Validate on next live episode (Week 12)** | ⬜ Pending next generation |

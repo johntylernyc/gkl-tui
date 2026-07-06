@@ -34,6 +34,24 @@ class TeamStats:
 
 
 @dataclass
+class TeamProfile:
+    """Team + manager metadata (no stats) — the `team_key` lookup and
+    manager biographical info surfaced in the TUI's Manager Lookup screen."""
+    team_key: str
+    name: str
+    manager_nickname: str
+    manager_guid: str = ""
+    felo_score: str = ""     # Yahoo's internal fantasy skill rating
+    felo_tier: str = ""      # e.g. "gold", "silver", "bronze"
+    is_current_login: bool = False
+    waiver_priority: int = 0
+    number_of_moves: int = 0
+    number_of_trades: int = 0
+    clinched_playoffs: bool = False
+    team_logo_url: str = ""
+
+
+@dataclass
 class Matchup:
     week: int
     week_start: str
@@ -683,6 +701,98 @@ class YahooFantasyAPI:
     def get_team_season_stats(self, league_key: str) -> list[TeamStats]:
         """Get season-long cumulative stats for all teams in the league."""
         return self._get_all_team_stats(f"league/{league_key}/teams;out=stats")
+
+    def get_team_profiles(self, league_key: str) -> list[TeamProfile]:
+        """Team + manager metadata for every team in the league (no stats).
+
+        Backs the TUI's Manager Lookup screen: team_key lookup plus
+        biographical fields (felo score/tier, waiver priority, move/trade
+        counts, playoff clinch) Yahoo returns on the base team resource.
+        Cached for an hour — this data changes at most a few times a week.
+        """
+        data = self._get(f"league/{league_key}/teams", cache_ttl=3600)
+        profiles: list[TeamProfile] = []
+        try:
+            teams_data = data["league"][1]["teams"]
+            count = int(teams_data["count"])
+            for i in range(count):
+                team_wrapper = teams_data[str(i)]["team"]
+                profiles.append(self._parse_team_profile(team_wrapper))
+        except (KeyError, IndexError, TypeError):
+            pass
+        return profiles
+
+    @staticmethod
+    def _parse_team_profile(team_wrapper: list) -> TeamProfile:
+        """Parse a single team's metadata + manager bio from Yahoo's nested
+        array format. Every field is defensive — Yahoo omits fields (e.g.
+        `clinched_playoffs`, `felo_tier`) whenever they aren't applicable."""
+        team_key = ""
+        name = ""
+        waiver_priority = 0
+        number_of_moves = 0
+        number_of_trades = 0
+        clinched_playoffs = False
+        team_logo_url = ""
+        manager_nickname = ""
+        manager_guid = ""
+        felo_score = ""
+        felo_tier = ""
+        is_current_login = False
+
+        meta = team_wrapper[0] if team_wrapper and isinstance(team_wrapper[0], list) else []
+        for item in meta:
+            if not isinstance(item, dict):
+                continue
+            if "team_key" in item:
+                team_key = item["team_key"]
+            if "name" in item:
+                name = item["name"]
+            if "waiver_priority" in item:
+                try:
+                    waiver_priority = int(item["waiver_priority"])
+                except (TypeError, ValueError):
+                    pass
+            if "number_of_moves" in item:
+                try:
+                    number_of_moves = int(item["number_of_moves"])
+                except (TypeError, ValueError):
+                    pass
+            if "number_of_trades" in item:
+                try:
+                    number_of_trades = int(item["number_of_trades"])
+                except (TypeError, ValueError):
+                    pass
+            if "clinched_playoffs" in item:
+                clinched_playoffs = bool(int(item.get("clinched_playoffs", 0)))
+            if "team_logos" in item:
+                try:
+                    logos = item["team_logos"]
+                    team_logo_url = logos[0]["team_logo"]["url"]
+                except (KeyError, IndexError, TypeError):
+                    pass
+            if "managers" in item:
+                try:
+                    mgr = item["managers"][0]["manager"]
+                    manager_nickname = mgr.get("nickname", "")
+                    manager_guid = mgr.get("guid", "")
+                    felo_score = str(mgr.get("felo_score", "") or "")
+                    felo_tier = mgr.get("felo_tier", "") or ""
+                    is_current_login = bool(int(mgr.get("is_current_login", 0)))
+                except (KeyError, IndexError, TypeError):
+                    pass
+
+        return TeamProfile(
+            team_key=team_key, name=name,
+            manager_nickname=manager_nickname, manager_guid=manager_guid,
+            felo_score=felo_score, felo_tier=felo_tier,
+            is_current_login=is_current_login,
+            waiver_priority=waiver_priority,
+            number_of_moves=number_of_moves,
+            number_of_trades=number_of_trades,
+            clinched_playoffs=clinched_playoffs,
+            team_logo_url=team_logo_url,
+        )
 
     def get_team_week_stats(self, league_key: str, week: int) -> list[TeamStats]:
         """Get stats for all teams for a specific week."""

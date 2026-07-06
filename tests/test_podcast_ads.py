@@ -15,9 +15,9 @@ from gkl.podcast.ads import (
 
 # -- Library sanity ---------------------------------------------------------
 
-def test_ad_library_has_at_least_12_spots() -> None:
-    """Enough ads so a 2-per-episode rotation doesn't repeat for 6 weeks."""
-    assert len(AD_LIBRARY) >= 12
+def test_ad_library_has_at_least_10_spots() -> None:
+    """Enough ads so a 2-per-episode rotation doesn't repeat for 5 weeks."""
+    assert len(AD_LIBRARY) >= 10
 
 
 def test_ad_slugs_are_unique() -> None:
@@ -34,8 +34,8 @@ def test_ad_copy_is_reasonable_length() -> None:
 
 
 def test_find_ad_returns_matching_spot() -> None:
-    ad = find_ad("victory-serum")
-    assert ad.slug == "victory-serum"
+    ad = find_ad("ironclad-trc")
+    assert ad.slug == "ironclad-trc"
 
 
 def test_find_ad_raises_on_unknown_slug() -> None:

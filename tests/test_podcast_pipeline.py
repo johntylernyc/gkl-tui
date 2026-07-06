@@ -10,6 +10,7 @@ import pytest
 from gkl.podcast.datapack import DataPack, DataPackMeta
 from gkl.podcast.pipeline import (
     _slot_paths_for_weekly_recap, generate_weekly_recap_episode,
+    load_prior_takeaways,
 )
 from gkl.podcast.script_writer import Act, DialogueTurn, Script, ScriptVersions
 from gkl.podcast.voice import ActRenderResult
@@ -154,11 +155,17 @@ async def test_generate_weekly_recap_writes_all_artifacts(
     def fake_mix(recipe, slot_paths, output_path):
         output_path.write_bytes(b"final-mp3")
 
+    async def fake_write_takeaways(script, datapack, **k):
+        return "# Weekly Recap Takeaways — Week 4\n\n## Topics covered\n- Act 1: hooks"
+
     monkeypatch.setattr(
         "gkl.podcast.pipeline.build_weekly_recap_datapack", fake_build_datapack,
     )
     monkeypatch.setattr("gkl.podcast.pipeline.seed_weekly_recap", fake_seed)
     monkeypatch.setattr("gkl.podcast.pipeline.write_script", fake_write_script)
+    monkeypatch.setattr(
+        "gkl.podcast.pipeline.write_takeaways", fake_write_takeaways,
+    )
     monkeypatch.setattr(
         "gkl.podcast.pipeline.render_episode_voices", fake_render_voices,
     )
@@ -190,11 +197,21 @@ async def test_generate_weekly_recap_writes_all_artifacts(
     for n in (1, 2, 3):
         assert (result.episode_dir / f"act_{n}.mp3").exists()
 
+    # Phase 3d takeaways must be persisted alongside the script
+    takeaways_path = result.episode_dir / "takeaways.md"
+    assert takeaways_path.exists()
+    assert "Weekly Recap Takeaways" in takeaways_path.read_text()
+    assert result.takeaways_path == takeaways_path
+    # No prior episodes on disk for this fresh run
+    assert result.prior_episodes_used == 0
+
     manifest = json.loads((result.episode_dir / "episode.json").read_text())
     assert manifest["target_week"] == 4
     assert manifest["league_key"] == "mlb.l.9999"
     assert manifest["ad_slugs"] == ["victory-serum", "memorial-mattress"]
     assert manifest["char_cost_estimate"] > 0
+    assert manifest["takeaways_path"].endswith("takeaways.md")
+    assert manifest["prior_episodes_used"] == 0
 
 
 @pytest.mark.anyio
@@ -246,9 +263,12 @@ async def test_generate_weekly_recap_char_cost_sums_turn_chars(
 
     from gkl.podcast.ads import AdSpot
 
+    async def _takeaways(*a, **k): return "# Takeaways stub"
+
     monkeypatch.setattr("gkl.podcast.pipeline.build_weekly_recap_datapack", _dp)
     monkeypatch.setattr("gkl.podcast.pipeline.seed_weekly_recap", _seed)
     monkeypatch.setattr("gkl.podcast.pipeline.write_script", _script)
+    monkeypatch.setattr("gkl.podcast.pipeline.write_takeaways", _takeaways)
     monkeypatch.setattr("gkl.podcast.pipeline.render_episode_voices", _voices)
     monkeypatch.setattr(
         "gkl.podcast.pipeline.select_ads_for_episode",
@@ -272,3 +292,99 @@ async def test_generate_weekly_recap_char_cost_sums_turn_chars(
 
     # Each act contributes 100 chars (one turn of 100 X's). Total = 300.
     assert result.char_cost_estimate == 300
+
+
+# -- Prior-takeaways loader --------------------------------------------------
+
+def _write_episode_takeaways(
+    league_dir: Path, season: str, week: int, content: str,
+) -> Path:
+    episode_dir = league_dir / f"{season}-w{week:02d}"
+    episode_dir.mkdir(parents=True, exist_ok=True)
+    path = episode_dir / "takeaways.md"
+    path.write_text(content)
+    return path
+
+
+def test_load_prior_takeaways_returns_empty_when_dir_missing(tmp_path: Path) -> None:
+    league_dir = tmp_path / "podcast" / "mlb.l.1"
+    assert load_prior_takeaways(league_dir, "2026", 5) == ""
+
+
+def test_load_prior_takeaways_concatenates_oldest_first(tmp_path: Path) -> None:
+    league_dir = tmp_path / "podcast" / "mlb.l.1"
+    _write_episode_takeaways(league_dir, "2026", 1, "Week 1 content")
+    _write_episode_takeaways(league_dir, "2026", 2, "Week 2 content")
+    _write_episode_takeaways(league_dir, "2026", 3, "Week 3 content")
+
+    result = load_prior_takeaways(league_dir, "2026", current_target_week=4)
+
+    # All three episodes included, oldest first
+    assert "Week 1 content" in result
+    assert "Week 2 content" in result
+    assert "Week 3 content" in result
+    assert result.index("Week 1") < result.index("Week 2") < result.index("Week 3")
+    # Includes per-episode header so the model can attribute callbacks
+    assert "Week 1" in result
+    assert "Week 2" in result
+
+
+def test_load_prior_takeaways_excludes_current_target_week(tmp_path: Path) -> None:
+    league_dir = tmp_path / "podcast" / "mlb.l.1"
+    _write_episode_takeaways(league_dir, "2026", 3, "prior")
+    _write_episode_takeaways(league_dir, "2026", 4, "current run leftover")
+
+    result = load_prior_takeaways(league_dir, "2026", current_target_week=4)
+
+    assert "prior" in result
+    # Re-running week 4 must not feed its own takeaways back into itself
+    assert "current run leftover" not in result
+
+
+def test_load_prior_takeaways_caps_at_window(tmp_path: Path) -> None:
+    league_dir = tmp_path / "podcast" / "mlb.l.1"
+    for w in range(1, 9):  # 8 prior weeks
+        _write_episode_takeaways(league_dir, "2026", w, f"Week {w} content")
+
+    result = load_prior_takeaways(
+        league_dir, "2026", current_target_week=9, window=6,
+    )
+
+    # Only the 6 most recent (weeks 3..8) should be included
+    assert "Week 3 content" in result
+    assert "Week 8 content" in result
+    assert "Week 1 content" not in result
+    assert "Week 2 content" not in result
+
+
+def test_load_prior_takeaways_isolates_seasons(tmp_path: Path) -> None:
+    league_dir = tmp_path / "podcast" / "mlb.l.1"
+    _write_episode_takeaways(league_dir, "2025", 3, "OLD SEASON")
+    _write_episode_takeaways(league_dir, "2026", 3, "CURRENT SEASON")
+
+    result = load_prior_takeaways(league_dir, "2026", current_target_week=5)
+
+    assert "CURRENT SEASON" in result
+    assert "OLD SEASON" not in result
+
+
+def test_load_prior_takeaways_skips_dirs_without_takeaways_file(tmp_path: Path) -> None:
+    league_dir = tmp_path / "podcast" / "mlb.l.1"
+    # Episode dir exists but no takeaways.md yet (mid-build state)
+    (league_dir / "2026-w03").mkdir(parents=True)
+    _write_episode_takeaways(league_dir, "2026", 4, "has takeaways")
+
+    result = load_prior_takeaways(league_dir, "2026", current_target_week=5)
+
+    assert "has takeaways" in result
+    # Loader must not crash on the in-flight w03 dir
+
+
+def test_load_prior_takeaways_skips_empty_files(tmp_path: Path) -> None:
+    league_dir = tmp_path / "podcast" / "mlb.l.1"
+    _write_episode_takeaways(league_dir, "2026", 3, "")  # empty
+    _write_episode_takeaways(league_dir, "2026", 4, "real content")
+
+    result = load_prior_takeaways(league_dir, "2026", current_target_week=5)
+
+    assert "real content" in result

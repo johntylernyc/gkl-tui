@@ -26,9 +26,11 @@ from gkl.podcast.skipper_seed import (
     DEFAULT_SEGMENT_ARTIFACT, _extract_section, _substitute,
 )
 from gkl.podcast.source_builder import (
-    format_free_agents, format_h2h_records, format_power_rankings,
+    format_category_leaders, format_free_agents, format_h2h_records,
+    format_historical_adds, format_power_rankings, format_roster_form,
     format_scoreboard, format_standings, format_target_week_player_stats,
-    format_target_week_transactions,
+    format_target_week_transactions, format_team_momentum,
+    format_weekly_power_rankings, format_weekly_standouts,
 )
 from gkl.skipper import load_anthropic_key
 
@@ -165,20 +167,46 @@ def build_data_summary(
         f"{format_standings(datapack.roto_standings)}\n\n"
         f"Head-to-head records through Week {week}:\n"
         f"{format_h2h_records(datapack.h2h_records)}\n\n"
-        f"Power rankings (hypothetical all-play record):\n"
+        f"Power rankings — SEASON-cumulative all-play (use for season-long "
+        f"'best roster' framing, NOT for 'best team this week'):\n"
         f"{format_power_rankings(datapack.power_rankings)}\n\n"
+        f"Power rankings — WEEK {week} ONLY (single-week all-play; THE source "
+        f"for any 'best team this week' or weekly power-ranking claim in Act "
+        f"1 — do NOT use the season table for weekly claims):\n"
+        f"{format_weekly_power_rankings(datapack)}\n\n"
+        "Recent-form momentum (last few played weeks per team — use for the "
+        "standings-tour heater/slump framing and fall/rise picks):\n"
+        f"{format_team_momentum(datapack)}\n\n"
+        "Category leaders by scoring category (season-long roto — ground "
+        "truth for the Category Kings topic AND for any 'manager is Nth in "
+        "<category> on the season' color layered onto a weekly result):\n"
+        f"{format_category_leaders(datapack)}\n\n"
+        "Standout individual performances this week (week line bundled with "
+        "last-30-day + season form — source for the Weekly Awards topic and "
+        "for conditionally layering trend/season context onto a weekly "
+        "performance):\n"
+        f"{format_weekly_standouts(datapack)}\n\n"
         f"Transactions during Week {week}:\n"
         f"{format_target_week_transactions(datapack)}\n\n"
         "Top free agents available right now "
         "(verify any FA pickup recommendation against this list):\n"
-        f"{format_free_agents(datapack)}"
+        f"{format_free_agents(datapack)}\n\n"
+        "Historical adds (players added 3-4 weeks ago, with stats since — "
+        "use for the look-back topic and to verify any look-back claim):\n"
+        f"{format_historical_adds(datapack)}"
     )
     if include_player_stats:
         base += (
             f"\n\nPer-player performance for Week {week} "
-            "(USE THIS to verify any individual player-stat claim — every "
-            "number cited about a player MUST match what's here):\n"
+            "(USE THIS to verify any individual player WEEKLY stat claim — "
+            "every weekly number cited about a player MUST match what's "
+            "here):\n"
             f"{format_target_week_player_stats(datapack)}"
+            "\n\nSeason and last-30-day form for every rostered player "
+            "(USE THIS to verify any TREND or SEASON claim layered onto a "
+            "weekly performance — e.g. 'he's slugging six-twenty over the "
+            "last thirty' or 'well above his season norm'):\n"
+            f"{format_roster_form(datapack)}"
         )
     return base
 
@@ -213,6 +241,10 @@ def load_editor_prompt(segment_artifact: Path) -> StepPrompt:
     return _load_step_prompt(segment_artifact, "Production editor (Phase 3c)")
 
 
+def load_takeaways_prompt(segment_artifact: Path) -> StepPrompt:
+    return _load_step_prompt(segment_artifact, "Takeaways generator (Phase 3d)")
+
+
 # ---------- Shared Claude call ----------
 
 async def _call_opus(
@@ -239,14 +271,27 @@ async def _call_opus(
 
 # ---------- Step 3a: draft ----------
 
+# Sentinel value for `prior_takeaways` when no prior episodes exist. The
+# draft prompt's continuity section keys on this exact string — keep them
+# in sync.
+NO_PRIOR_EPISODES = "(no prior episodes)"
+
+
 async def write_draft_script(
     datapack: DataPack,
     suggested_topics_md: str,
     *,
+    prior_takeaways: str | None = None,
     segment_artifact: Path | None = None,
     model: str = SCRIPT_WRITER_MODEL,
 ) -> Script:
-    """Phase 3a — produce the first-draft op-ed dialogue."""
+    """Phase 3a — produce the first-draft op-ed dialogue.
+
+    `prior_takeaways` is the concatenated takeaway markdown from the
+    previous 4-6 episodes (loaded by the pipeline). Pass `None` (or an
+    empty string) and the prompt will render `(no prior episodes)` so the
+    continuity rules know to skip callbacks entirely.
+    """
     prompt = load_draft_prompt(segment_artifact or DEFAULT_SEGMENT_ARTIFACT)
     meta = datapack.meta
     user_prompt = _substitute(prompt.user, {
@@ -259,6 +304,7 @@ async def write_draft_script(
         # Draft writer skips the per-player table — it's huge, and the
         # fact-checker downstream catches any per-player hallucinations.
         "data_summary": build_data_summary(datapack, include_player_stats=False),
+        "prior_takeaways": (prior_takeaways or "").strip() or NO_PRIOR_EPISODES,
     })
     raw = await _call_opus(prompt.system, user_prompt, model=model)
     return parse_script(raw)
@@ -270,13 +316,22 @@ async def fact_check_script(
     draft: Script,
     datapack: DataPack,
     *,
+    suggested_topics_md: str = "",
     segment_artifact: Path | None = None,
     model: str = SCRIPT_WRITER_MODEL,
 ) -> Script:
     """Phase 3b — validate every stat claim; correct or strip where wrong.
 
-    Receives the comprehensive per-player weekly stat table — every
-    individual player claim in the draft is verified against it.
+    Receives the comprehensive per-player weekly stat table AND the
+    season/last-30 form table — so both headline weekly claims and the
+    trend/season context layered on top of them are verifiable.
+
+    `suggested_topics_md` is the Skipper seed output. It carries
+    tool-pulled numbers the structured data pack does NOT — most
+    importantly the Statcast profiles behind Regression Watch and award
+    "real vs lucky" calls. Passing it lets the fact-checker cross-check
+    those against what the seed actually pulled, rather than waving them
+    through as unverifiable.
     """
     prompt = load_fact_check_prompt(segment_artifact or DEFAULT_SEGMENT_ARTIFACT)
     meta = datapack.meta
@@ -284,6 +339,7 @@ async def fact_check_script(
         "league_name": meta.league_name,
         "target_week": str(meta.target_week),
         "data_summary": build_data_summary(datapack, include_player_stats=True),
+        "suggested_topics": suggested_topics_md.strip() or "(not provided)",
         "draft_script": draft.as_markdown(),
     })
     raw = await _call_opus(prompt.system, user_prompt, model=model)
@@ -493,12 +549,43 @@ def normalize_script_for_tts(script: Script) -> Script:
     ])
 
 
+# ---------- Step 3d: takeaways ----------
+
+async def write_takeaways(
+    script: Script,
+    datapack: DataPack,
+    *,
+    segment_artifact: Path | None = None,
+    model: str = SCRIPT_WRITER_MODEL,
+) -> str:
+    """Phase 3d — distill the final script into a structured takeaways doc.
+
+    The output is plain markdown (not parsed) — its only consumer is a
+    FUTURE episode's draft writer, which reads the markdown verbatim as
+    the `prior_takeaways` continuity input.
+
+    Only sees the final script + episode metadata (no data pack). Its job
+    is to summarize what the hosts SAID, not to introduce new facts.
+    """
+    prompt = load_takeaways_prompt(segment_artifact or DEFAULT_SEGMENT_ARTIFACT)
+    meta = datapack.meta
+    user_prompt = _substitute(prompt.user, {
+        "league_name": meta.league_name,
+        "season": meta.season,
+        "target_week": str(meta.target_week),
+        "final_script": script.as_markdown(),
+    })
+    # Takeaways are short — a few hundred tokens at most. 2048 is generous.
+    return await _call_opus(prompt.system, user_prompt, model=model, max_tokens=2048)
+
+
 # ---------- Orchestrator ----------
 
 async def write_script(
     datapack: DataPack,
     suggested_topics_md: str,
     *,
+    prior_takeaways: str | None = None,
     segment_artifact: Path | None = None,
     model: str = SCRIPT_WRITER_MODEL,
 ) -> ScriptVersions:
@@ -506,13 +593,18 @@ async def write_script(
 
     Callers (e.g. the pipeline) typically care about `.final`, but we return
     all three so intermediate artifacts can be persisted for debugging.
+
+    `prior_takeaways` is threaded into the draft writer only. The fact
+    checker and editor work on the script alone, not on prior context.
     """
     draft = await write_draft_script(
         datapack, suggested_topics_md,
+        prior_takeaways=prior_takeaways,
         segment_artifact=segment_artifact, model=model,
     )
     fact_checked = await fact_check_script(
         draft, datapack,
+        suggested_topics_md=suggested_topics_md,
         segment_artifact=segment_artifact, model=model,
     )
     final = await edit_script(

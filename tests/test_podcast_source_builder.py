@@ -5,14 +5,16 @@ from __future__ import annotations
 import pytest
 
 from gkl.podcast.datapack import (
-    CategoryResult, DataPack, DataPackMeta, H2HRecord, MatchupRecord,
-    PowerRanking, RotoEntry, StatCategoryRecord, TransactionPlayerRecord,
-    TransactionRecord,
+    CategoryResult, DataPack, DataPackMeta, H2HRecord, HistoricalAdd,
+    MatchupRecord, PowerRanking, RotoEntry, StatCategoryRecord, TeamMomentum,
+    TransactionPlayerRecord, TransactionRecord,
 )
+from gkl.podcast.datapack import RosterPlayer, TeamRoster
 from gkl.podcast.source_builder import (
-    format_free_agents, format_h2h_records, format_power_rankings,
+    format_category_leaders, format_free_agents, format_h2h_records,
+    format_historical_adds, format_power_rankings, format_roster_form,
     format_scoreboard, format_standings, format_target_week_transactions,
-    split_suggested_topics,
+    format_team_momentum, format_weekly_standouts, split_suggested_topics,
 )
 
 
@@ -386,3 +388,292 @@ def test_split_suggested_topics_raises_on_missing_act() -> None:
 def test_split_suggested_topics_raises_on_no_headers() -> None:
     with pytest.raises(ValueError, match="no `## Act N` headings"):
         split_suggested_topics("no headers here")
+
+
+# -- Team momentum + historical adds -----------------------------------------
+
+def test_format_team_momentum_sorts_hottest_first_with_window_label() -> None:
+    dp = _datapack()
+    dp.team_momentum = [
+        TeamMomentum(
+            team_key="t.1", name="Alpha", manager="Ann",
+            weeks_covered=[3, 4, 5, 6, 7],
+            wins=5, losses=0, ties=0,
+            cat_wins=50, cat_losses=30, cat_ties=10,
+        ),
+        TeamMomentum(
+            team_key="t.2", name="Beta", manager="Bob",
+            weeks_covered=[3, 4, 5, 6, 7],
+            wins=1, losses=4, ties=0,
+            cat_wins=30, cat_losses=50, cat_ties=10,
+        ),
+    ]
+
+    text = format_team_momentum(dp)
+
+    assert "Alpha (Ann): 5-0-0 over weeks 3-7" in text
+    assert "50-30-10 in categories" in text
+    # Alpha listed before Beta (hotter)
+    assert text.index("Alpha") < text.index("Beta")
+
+
+def test_format_team_momentum_reports_teams_with_no_window_data() -> None:
+    dp = _datapack()
+    dp.team_momentum = [
+        TeamMomentum(
+            team_key="t.99", name="Cold", manager="Cam",
+            weeks_covered=[], wins=0, losses=0, ties=0,
+            cat_wins=0, cat_losses=0, cat_ties=0,
+        ),
+    ]
+    text = format_team_momentum(dp)
+    assert "no recent matchup data" in text
+
+
+def test_format_team_momentum_empty() -> None:
+    dp = _datapack()
+    dp.team_momentum = []
+    assert format_team_momentum(dp) == "(no momentum data)"
+
+
+def test_format_historical_adds_groups_by_team_and_includes_stats() -> None:
+    dp = _datapack()
+    dp.historical_adds = [
+        HistoricalAdd(
+            player_key="p.1", player_name="Hot Bat", position="OF",
+            team_abbr="NYY", added_week=4, weeks_ago=4,
+            fantasy_team_key="t.1", fantasy_team_name="Alpha", manager="Ann",
+            still_on_roster=True, selected_position="OF",
+            availability_tag="[ACTIVE]",
+            season_stats={"12": "8"}, last30_stats={"12": "5"},
+        ),
+    ]
+    text = format_historical_adds(dp)
+    assert "Alpha (Ann):" in text
+    assert "Added Week 4 (4 weeks ago)" in text
+    assert "Hot Bat" in text
+    assert "HR 5" in text  # last30 line uses the HR category
+    assert "HR 8" in text  # season line
+
+
+def test_format_historical_adds_calls_out_dropped() -> None:
+    dp = _datapack()
+    dp.historical_adds = [
+        HistoricalAdd(
+            player_key="p.99", player_name="Cut Bait", position="OF",
+            team_abbr="NYY", added_week=5, weeks_ago=3,
+            fantasy_team_key="t.1", fantasy_team_name="Alpha", manager="Ann",
+            still_on_roster=False, selected_position="",
+            availability_tag="[DROPPED]",
+            season_stats={}, last30_stats={},
+        ),
+    ]
+    text = format_historical_adds(dp)
+    assert "dropped after pickup" in text
+
+
+def test_format_historical_adds_empty() -> None:
+    dp = _datapack()
+    dp.historical_adds = []
+    assert format_historical_adds(dp) == "(no qualifying adds from 3-4 weeks ago)"
+
+
+# -- Category Kings / Weekly Awards / roster form formatters ------------------
+
+def _cat_categories() -> list[StatCategoryRecord]:
+    return [
+        StatCategoryRecord(stat_id="12", display_name="HR", sort_order="1",
+                           position_type="B", is_only_display=False),
+        StatCategoryRecord(stat_id="16", display_name="SB", sort_order="1",
+                           position_type="B", is_only_display=False),
+        StatCategoryRecord(stat_id="26", display_name="ERA", sort_order="0",
+                           position_type="P", is_only_display=False),
+        StatCategoryRecord(stat_id="3", display_name="AVG", sort_order="1",
+                           position_type="B", is_only_display=False),
+    ]
+
+
+def _cat_standings() -> list[RotoEntry]:
+    # roto "rank" == points: higher is better (worst team gets 1).
+    # Power leads HR (3 pts) and ERA (3 pts); Speed leads SB (3 pts).
+    return [
+        RotoEntry(rank=1, team_key="t.1", name="Power", manager="Pat",
+                  total_points=9.0,
+                  category_ranks={"12": 3.0, "16": 1.0, "26": 3.0, "3": 2.0},
+                  category_raw={"12": "120", "16": "30", "26": "3.10", "3": ".270"}),
+        RotoEntry(rank=2, team_key="t.2", name="Speed", manager="Sam",
+                  total_points=8.0,
+                  category_ranks={"12": 2.0, "16": 3.0, "26": 2.0, "3": 3.0},
+                  category_raw={"12": "95", "16": "88", "26": "3.50", "3": ".281"}),
+        RotoEntry(rank=3, team_key="t.3", name="Cellar", manager="Cam",
+                  total_points=4.0,
+                  category_ranks={"12": 1.0, "16": 2.0, "26": 1.0, "3": 1.0},
+                  category_raw={"12": "70", "16": "60", "26": "4.80", "3": ".240"}),
+    ]
+
+
+def _cat_datapack() -> DataPack:
+    dp = _datapack()
+    dp.categories = _cat_categories()
+    dp.roto_standings = _cat_standings()
+    return dp
+
+
+def test_format_category_leaders_crowns_highest_points_team() -> None:
+    text = format_category_leaders(_cat_datapack())
+    lines = {ln.split(":")[0].lstrip("- "): ln for ln in text.splitlines() if ln.startswith("- ")}
+    # HR leader is Power (3 pts), with raw value first.
+    assert lines["HR"].startswith("- HR: Power (120)")
+    # SB leader is Speed (3 pts) — even though Power has fewer raw SB.
+    assert lines["SB"].startswith("- SB: Speed (88)")
+
+
+def test_format_category_leaders_handles_low_is_better() -> None:
+    """ERA leader must be the team with the LOWEST ERA (highest roto points)."""
+    text = format_category_leaders(_cat_datapack())
+    era = next(ln for ln in text.splitlines() if ln.startswith("- ERA:"))
+    # Power has 3 ERA pts and the lowest ERA (3.10) — it should lead.
+    assert era.startswith("- ERA: Power (3.10)")
+    # Cellar (4.80 ERA) must NOT be first.
+    assert "Cellar" not in era.split(">")[0]
+
+
+def test_format_category_leaders_counts_most_categories_led() -> None:
+    text = format_category_leaders(_cat_datapack())
+    # Power leads HR + ERA = 2; Speed leads SB + AVG = 2.
+    assert "Most categories led:" in text
+    summary = text.split("Most categories led:")[1]
+    assert "Power (2)" in summary
+    assert "Speed (2)" in summary
+
+
+def _standout_datapack() -> DataPack:
+    dp = _datapack()
+    dp.categories = _cat_categories()
+    # target-week rosters carry week_stats; current rosters carry season/last30
+    dp.target_week_rosters = [
+        TeamRoster(team_key="t.1", team_name="Power", manager="Pat", players=[
+            RosterPlayer(player_key="p.bomber", name="Big Bomber", position="1B",
+                         team_abbr="NYY", selected_position="1B",
+                         availability_tag="[ACTIVE — in starting lineup]",
+                         season_stats={}, last30_stats={},
+                         week_stats={"12": "5", "16": "0", "3": ".400"}),
+        ]),
+        TeamRoster(team_key="t.2", team_name="Speed", manager="Sam", players=[
+            RosterPlayer(player_key="p.burner", name="Speedy Burner", position="OF",
+                         team_abbr="TB", selected_position="OF",
+                         availability_tag="[ACTIVE — in starting lineup]",
+                         season_stats={}, last30_stats={},
+                         week_stats={"12": "0", "16": "6", "3": ".333"}),
+        ]),
+    ]
+    dp.rosters = [
+        TeamRoster(team_key="t.1", team_name="Power", manager="Pat", players=[
+            RosterPlayer(player_key="p.bomber", name="Big Bomber", position="1B",
+                         team_abbr="NYY", selected_position="1B",
+                         availability_tag="[ACTIVE]",
+                         season_stats={"12": "30", "3": ".280"},
+                         last30_stats={"12": "12", "3": ".320"}),
+        ]),
+    ]
+    return dp
+
+
+def test_format_weekly_standouts_bundles_three_windows() -> None:
+    text = format_weekly_standouts(_standout_datapack())
+    bomber = next(ln for ln in text.splitlines() if "Big Bomber" in ln)
+    # Week headline + last-30 + season context all present for the joined player.
+    assert "week — " in bomber and "HR 5" in bomber
+    assert "last 30 — " in bomber and "HR 12" in bomber
+    assert "season — " in bomber and "HR 30" in bomber
+    # The category it topped is annotated.
+    assert "[topped this week: HR]" in bomber
+
+
+def test_format_weekly_standouts_surfaces_category_leaders_only() -> None:
+    """A player who topped a counting cat for the week is surfaced; the
+    per-category leaders differ (Bomber tops HR, Burner tops SB)."""
+    text = format_weekly_standouts(_standout_datapack())
+    assert "Big Bomber" in text
+    assert "Speedy Burner" in text
+    # Burner has no season/last30 join (absent from current rosters) — degrades
+    # gracefully to week-only without crashing.
+    burner = next(ln for ln in text.splitlines() if "Speedy Burner" in ln)
+    assert "week — " in burner
+
+
+def test_format_weekly_standouts_empty_when_no_rosters() -> None:
+    dp = _datapack()
+    dp.target_week_rosters = []
+    assert format_weekly_standouts(dp) == "(no target-week rosters in this data pack)"
+
+
+def test_format_roster_form_lists_season_and_last30() -> None:
+    text = format_roster_form(_standout_datapack())
+    assert "Power (Pat):" in text
+    bomber = next(ln for ln in text.splitlines() if "Big Bomber" in ln)
+    assert "season — " in bomber
+    assert "last 30 — " in bomber
+
+
+# -- Weekly power rankings / near-tie / category-record leader ---------------
+
+def _pr(rank, key, name, mgr, w, l, t, pct):
+    return PowerRanking(rank=rank, team_key=key, name=name, manager=mgr,
+                        hypothetical_wins=w, hypothetical_losses=l,
+                        hypothetical_ties=t, win_pct=pct)
+
+
+def test_format_weekly_power_rankings_uses_weekly_field() -> None:
+    from gkl.podcast.source_builder import format_weekly_power_rankings
+    dp = _datapack()
+    dp.weekly_power_rankings = [
+        _pr(1, "t.1", "Boys", "Ryan", 16, 1, 0, 0.941),
+        _pr(2, "t.2", "Revs", "Aaron", 15, 1, 1, 0.882),
+    ]
+    text = format_weekly_power_rankings(dp)
+    assert "1. Boys (Ryan): 16-1-0 for Week 4" in text
+    assert "2. Revs (Aaron): 15-1-1 for Week 4" in text
+
+
+def test_format_weekly_power_rankings_degrades_when_absent() -> None:
+    from gkl.podcast.source_builder import format_weekly_power_rankings
+    dp = _datapack()  # no weekly_power_rankings attr set on this fixture path
+    dp.weekly_power_rankings = []
+    assert format_weekly_power_rankings(dp) == "(no weekly power rankings)"
+
+
+def test_format_standings_flags_near_ties() -> None:
+    standings = [
+        RotoEntry(rank=1, team_key="t.1", name="Alpha", manager="Ann",
+                  total_points=241.5, category_ranks={}, category_raw={}),
+        RotoEntry(rank=2, team_key="t.2", name="Beta", manager="Bob",
+                  total_points=219.5, category_ranks={}, category_raw={}),
+        RotoEntry(rank=3, team_key="t.3", name="Gamma", manager="Cal",
+                  total_points=219.0, category_ranks={}, category_raw={}),
+    ]
+    text = format_standings(standings, top_n=3)
+    # Beta (219.5) and Gamma (219.0) are 0.5 apart -> flagged near-tied.
+    assert "Near-tied in roto" in text
+    assert "Beta and Gamma (0.5 apart)" in text
+    # Alpha (241.5) is 22 clear of Beta -> NOT flagged.
+    assert "Alpha and Beta" not in text
+
+
+def test_format_h2h_records_surfaces_winpct_leader() -> None:
+    # ShapeShifters have MORE raw category wins but trail My Name on win%
+    # because of ties — My Name must be named the leader.
+    recs = [
+        H2HRecord(team_key="t.1", name="My Name", manager="Jon",
+                  wins=10, losses=1, ties=0,
+                  cat_wins=112, cat_losses=64, cat_ties=22),
+        H2HRecord(team_key="t.2", name="ShapeShifters", manager="Al",
+                  wins=8, losses=3, ties=0,
+                  cat_wins=113, cat_losses=68, cat_ties=17),
+    ]
+    text = format_h2h_records(recs)
+    leader_line = text.splitlines()[-1]
+    assert "BY WIN PERCENTAGE" in leader_line
+    # My Name first despite fewer raw category wins.
+    assert leader_line.index("My Name") < leader_line.index("ShapeShifters")
+    assert "0.621" in leader_line and "0.614" in leader_line

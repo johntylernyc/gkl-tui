@@ -81,8 +81,8 @@ from gkl.updater import (
     cleanup_old_binary, download_update,
 )
 from gkl.yahoo_api import (
-    League, Matchup, PlayerStats, StatCategory, TeamStats, Transaction, TransactionPlayer,
-    YahooFantasyAPI,
+    League, Matchup, PlayerStats, StatCategory, TeamProfile, TeamStats,
+    Transaction, TransactionPlayer, YahooFantasyAPI,
 )
 from gkl.datastore import RosterDataStore
 from gkl.yahoo_auth import YahooAuth, load_credentials, save_credentials, is_web_mode
@@ -574,6 +574,125 @@ class LeagueStandingsScreen(Screen):
         else:
             self._week_end = min(self._week_end, self._last_completed_week)
         self.run_worker(self._render_standings, group="standings-fetch", exclusive=True)
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+
+# --- Manager Lookup Screen ---
+
+
+class ManagerLookupScreen(Screen):
+    """Team key + manager biographical lookup for every team in the league.
+
+    Surfaces the raw `team_key` (needed for tools like the nextgenpodcast
+    all-star CLI) alongside Yahoo's manager metadata: felo score/tier,
+    waiver priority, move/trade counts, and playoff-clinch status.
+    Highlight a row and press Enter (or 'y') to copy that team's key to
+    the clipboard.
+    """
+
+    BINDINGS = [("escape", "go_back", "Back"), ("q", "go_back", "Back"),
+                ("y", "copy_key", "Copy Team Key")]
+    CSS = """
+    #ml-header {
+        height: 1;
+        content-align: center middle;
+        text-style: bold;
+        background: $primary;
+        color: $foreground;
+    }
+    #ml-hint {
+        height: 1;
+        content-align: center middle;
+        background: $surface;
+        color: $text-muted;
+    }
+    #ml-table {
+        height: 1fr;
+        background: $panel;
+    }
+    DataTable > .datatable--cursor {
+        background: #3A5A3A;
+        color: #E8E4DF;
+    }
+    #ml-loading {
+        height: 3;
+        content-align: center middle;
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self, api: YahooFantasyAPI, league: League) -> None:
+        super().__init__()
+        self.api = api
+        self.league = league
+        self._profiles: list[TeamProfile] = []
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Static("", id="ml-header")
+        yield Static(
+            "Enter or 'y' on a row copies that team's key to the clipboard",
+            id="ml-hint",
+        )
+        yield DataTable(id="ml-table")
+        yield Static("Loading manager info...", id="ml-loading")
+        yield WrappingFooter()
+
+    def on_mount(self) -> None:
+        self.query_one("#ml-header", Static).update(
+            f" {self.league.name} — Manager Lookup "
+        )
+        self.query_one("#ml-table").display = False
+        self.run_worker(self._load)
+
+    async def _load(self) -> None:
+        self._profiles = await asyncio.to_thread(
+            self.api.get_team_profiles, self.league.league_key
+        )
+        self._profiles.sort(key=lambda p: p.name.lower())
+
+        table = self.query_one("#ml-table", DataTable)
+        table.cursor_type = "row"
+        table.add_columns(
+            "Team", "Manager", "Team Key", "Felo", "Tier",
+            "Waiver Pri.", "Moves", "Trades", "Clinched",
+        )
+        for p in self._profiles:
+            you = " (you)" if p.is_current_login else ""
+            table.add_row(
+                p.name, f"{p.manager_nickname}{you}", p.team_key,
+                p.felo_score or "—", p.felo_tier or "—",
+                str(p.waiver_priority) if p.waiver_priority else "—",
+                str(p.number_of_moves), str(p.number_of_trades),
+                "Yes" if p.clinched_playoffs else "",
+            )
+
+        loading = self.query("#ml-loading")
+        if loading:
+            loading.first().remove()
+        table.display = True
+        table.focus()
+
+    def _copy_row(self, row_idx: int | None) -> None:
+        if not self._profiles or row_idx is None:
+            return
+        if not (0 <= row_idx < len(self._profiles)):
+            return
+        profile = self._profiles[row_idx]
+        self.app.copy_to_clipboard(profile.team_key)
+        self.notify(f"Copied team key: {profile.team_key}")
+
+    def action_copy_key(self) -> None:
+        table = self.query_one("#ml-table", DataTable)
+        self._copy_row(table.cursor_row)
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """DataTable itself binds Enter to row selection, so copying on
+        Enter has to happen here rather than via a Screen-level binding."""
+        if event.data_table.id == "ml-table":
+            self._copy_row(event.cursor_row)
 
     def action_go_back(self) -> None:
         self.app.pop_screen()
@@ -8299,6 +8418,7 @@ class ScoreboardScreen(PlayerCompareMixin, Screen):
                 ("i", "player_detail", "Player Detail"),
                 ("a", "ask_skipper", "Ask Skipper"),
                 ("T", "trade_analyzer", "Trade Analyzer"),
+                ("m", "manager_lookup", "Manager Lookup"),
                 ("C", "settings", "Config")]
     CSS = """
     #board-header {
@@ -9112,6 +9232,10 @@ class ScoreboardScreen(PlayerCompareMixin, Screen):
 
     def action_settings(self) -> None:
         self.app.push_screen(SettingsScreen(self.api, self.league))
+
+    def action_manager_lookup(self) -> None:
+        if self.league:
+            self.app.push_screen(ManagerLookupScreen(self.api, self.league))
 
     def _load_week(self, week: int) -> None:
         """Switch to viewing a specific week's matchups."""

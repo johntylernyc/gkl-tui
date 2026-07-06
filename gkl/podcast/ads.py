@@ -6,10 +6,12 @@ lives in `assets/podcast/ads/library/<slug>.mp3`. Two ads are selected per
 episode via LRU rotation persisted to a per-league state file so the same two
 don't air two weeks running.
 
-Tone goal: convincing-enough to sound like a real sponsor read, absurd enough
-to be obviously fictional. Nutritional supplements, local auto dealers, meat
-subscriptions, tax services, parody betting apps — the normal sports radio
-menu.
+Tone goal (as of the 2026-07-02 refresh): fully over-the-top, GTA-radio-style
+satire across the whole library, not just a couple of spots. Sincere,
+confident ad-read delivery selling something absurd, predatory, or darkly
+funny underneath — testosterone clinics, crypto apps, ambulance-chasers,
+payday loans, extended-warranty robocalls. PG-13, obviously fictional, but
+every spot commits to the bit.
 """
 
 from __future__ import annotations
@@ -45,172 +47,209 @@ class AdSpot:
 
 
 # ---------- The ad library ----------
+#
+# Refreshed 2026-07-02. The prior 10-spot library (itself only half-
+# finished — 2 of a planned 4 GTA-style satire spots) was archived to
+# `gkl/podcast/ads_archive.py::ARCHIVED_AD_LIBRARY_2026_07_02` and the
+# mp3s moved to `assets/podcast/ads/_archive_2026-07-02/`. This batch is
+# entirely new concepts (no brand names or copy carried over) and every
+# spot is written fully over-the-top: sincere, confident ad-read delivery
+# selling something absurd, predatory, or darkly funny underneath — the
+# GTA-radio satire register throughout, not just a couple of spots. Four
+# are women-voiced/women-led (prospect-report, legacy-ink, apex-longevity
+# — plus the founder framing on several others) to keep the same mix as
+# prior batches. Voice IDs were chosen against `GET /v1/voices` on the
+# user's account on 2026-05-25 and reused here (no new casting needed).
 
 AD_LIBRARY: list[AdSpot] = [
     AdSpot(
-        slug="victory-serum",
-        title="Victory Serum",
-        tags=["supplement", "cheeky"],
-        voice_id="dbcih6CX6V58wprWOdS8",
-        voice_character="Gym-bro intensity. Pumped, caffeinated, slightly aggressive.",
+        slug="ironclad-trc",
+        title="Ironclad T-R-C Clinic",
+        tags=["supplement", "wellness", "satire"],
+        voice_id="dbcih6CX6V58wprWOdS8",  # Gym-bro intensity, pumped, aggressive
+        voice_character=(
+            "GTA-style men's-health-clinic satire. Aggressive, caffeinated, "
+            "utterly convinced — sells a six-minute doctor's visit like a "
+            "religious awakening."
+        ),
         copy=(
-            "Game on the line and you're dragging in the seventh? "
-            "VICTORY SERUM. Thirty grams of whey, forty milligrams of caffeine, "
-            "and one thousand milligrams of pure competitive spite. Drink it "
-            "before the first pitch. Order online at victoryserum dot com. "
-            "Warning: may cause yelling at fantasy teams."
+            "Forty and tired? That's not aging. That's LOW T. IRONCLAD "
+            "T-R-C CLINIC. One blood draw, one prescription, zero follow-"
+            "up questions. Our doctor's seen your labs for six minutes "
+            "total this year. Testosterone, HGH peptides, a vitamin drip "
+            "we invoice as innovative. Insurance won't cover it. "
+            "Confidence will. Because feeling like a closer beats seeing "
+            "a doctor."
         ),
     ),
     AdSpot(
-        slug="memorial-mattress",
-        title="Memorial Mattress",
-        tags=["mattress", "sports-radio-classic"],
-        voice_id="qSeXEcewz7tA0Q0qk9fH",
-        voice_character="Warm, empathetic, trust-me-I've-been-there. Classic mattress-ad sincerity.",
+        slug="skybox-capital",
+        title="Skybox Capital",
+        tags=["financial", "satire"],
+        voice_id="cjVigY5qzO86Huf0OWal",  # Eric — Smooth, Trustworthy
+        voice_character=(
+            "Smooth, trustworthy fintech-bro satire. Sells reckless "
+            "speculation with the calm authority of a real financial "
+            "advisor. GTA-style crypto-app satire."
+        ),
         copy=(
-            "Can't sleep after your closer blew a three-run lead? "
-            "MEMORIAL MATTRESS feels your pain. Our patented Ace Foam absorbs "
-            "disappointment, bad takes, and the crushing weight of a losing "
-            "week. Zero interest financing. Free delivery. Your bullpen may be "
-            "soft. Your mattress shouldn't be."
+            "Your 401k made two percent. Embarrassing. SKYBOX CAPITAL "
+            "puts your retirement into the same coins our interns trade "
+            "on lunch break. No fiduciary duty, no cooling-off period, "
+            "no floor. Past performance guarantees nothing, but our "
+            "billboards are very convincing. Download the app. Your "
+            "grandkids' inheritance was always more of a suggestion."
         ),
     ),
     AdSpot(
-        slug="honest-hanks-trucks",
-        title="Honest Hank's Pre-Owned Trucks",
-        tags=["auto", "local"],
-        voice_id="WWr4C8ld745zI3BiA8n7",
-        voice_character="Folksy Southern used-car huckster. Loud, endearing, slightly dishonest.",
+        slug="franchise-tag-legal",
+        title="Franchise Tag Legal",
+        tags=["legal", "satire"],
+        voice_id="pNInz6obpgDQGcFmaJgB",  # Adam — Dominant, Firm
+        voice_character=(
+            "Classic loud personal-injury-lawyer ad energy. Booming, "
+            "confident, self-interested. GTA-style ambulance-chaser "
+            "satire."
+        ),
         copy=(
-            "You ever meet a guy named Honest Hank who wasn't? You have now. "
-            "HONEST HANK'S PRE-OWNED TRUCKS. If it's on the lot, it runs. "
-            "Probably. Bring your trade-in, bring your hopes, bring a "
-            "co-signer. Honest Hank's. We accept cash, check, and excuses."
+            "Hurt on the job? Getting divorced? Both? FRANCHISE TAG "
+            "LEGAL negotiates you a contract like a bonafide All-Star. "
+            "No fee unless we win, and we define winning generously. Our "
+            "billboards outnumber our verdicts. Free consultation, "
+            "aggressive settlement, occasional court appearance. We get "
+            "you paid. We get paid more."
         ),
     ),
     AdSpot(
-        slug="daddys-tools",
-        title="Daddy's Tools",
-        tags=["home-improvement"],
-        voice_id="Mpo86HxDypWmsME2FSjf",
-        voice_character="Gruff but friendly blue-collar dad. Sawdust and cold beer.",
+        slug="prospect-report",
+        title="Prospect Report",
+        tags=["dating-app", "woman-led", "satire"],
+        voice_id="XrExE9yKIg1WjnnlVkGX",  # Matilda — Knowledgable, Professional
+        voice_character=(
+            "Methodical, data-driven founder voice. Treats dating like "
+            "scouting reports. GTA-style dating-app satire, quietly "
+            "intense delivery."
+        ),
         copy=(
-            "The deck isn't going to build itself, pal. Unless you call "
-            "DADDY'S TOOLS. One call, one truck, one weekend. We do the "
-            "measuring, sawing, cursing, and the other cursing. You do the "
-            "beer drinking. Daddy's Tools. Now in three states. Not liable "
-            "for marriages."
+            "Stop swiping blind. PROSPECT REPORT scouts your dates like "
+            "a first-round pick. Exit velocity, plate discipline, makeup "
+            "grade, all before the first coffee. Built by a woman tired "
+            "of scouting reports that were just guys lying in golf "
+            "shirts. Nine bucks a month. We can't fix chemistry. We can "
+            "flag the ones who still live with their moms."
         ),
     ),
     AdSpot(
-        slug="meatstone",
-        title="Meatstone Meat of the Month",
-        tags=["food", "subscription"],
-        voice_id="4QLC5fepxZkYmdD2IGRU",
-        voice_character="Deep, reverent, carnivore-poet. Thinks ribeye is a religious experience.",
+        slug="ironhorse-warranty",
+        title="Ironhorse Warranty Group",
+        tags=["auto", "satire"],
+        voice_id="gs0tAILXbY5DNrJrsM6F",  # Jeff — middle-aged American conversational
+        voice_character=(
+            "Extended-car-warranty robocall energy, but a real person "
+            "reading it sincerely. GTA-style scam-satire, folksy and "
+            "unbothered."
+        ),
         copy=(
-            "Tired of grilling the same sad burger while your team loses? "
-            "Upgrade. MEATSTONE MEAT OF THE MONTH ships two pounds of "
-            "ribeye, brisket, or mystery meat to your door every thirty days. "
-            "No lineups, no hidden fees, just protein. Order now and get a "
-            "free pack of questionable sausages."
+            "This is your final notice about your vehicle's extended "
+            "warranty. IRONHORSE WARRANTY GROUP has been trying to reach "
+            "you since your car was new. Full coverage, low monthly "
+            "payments, a claims department that answers roughly never. "
+            "We got your number from somewhere. We're not saying where. "
+            "Call now. Or don't. We'll call back."
         ),
     ),
     AdSpot(
-        slug="grand-slam-wagers",
-        title="Grand Slam Wagers",
-        tags=["betting-parody", "cheeky"],
-        voice_id="llNlEi50DSCIEuoOIaH7",
-        voice_character="Slick, fast-talking, self-aware hustler. Vegas-pitchman energy.",
+        slug="legacy-ink",
+        title="Legacy Ink Tattoo",
+        tags=["service", "woman-led", "satire"],
+        voice_id="FGY2WhTYpPnrIDTdsKH5",  # Laura — Enthusiast, Quirky
+        voice_character=(
+            "Chaotic, quick-witted tattoo-shop owner. Seen everything, "
+            "judges everything, still cheerful about it. GTA-style "
+            "regret-adjacent satire."
+        ),
         copy=(
-            "Think your uncle knows ball? So do we. GRAND SLAM WAGERS. The "
-            "only betting app endorsed by four out of five divorce attorneys. "
-            "Parlay responsibly. Or don't. Who are we, your mother? First "
-            "bet up to one hundred dollars matched. Terms and conditions "
-            "apply, obviously."
+            "Championship year? Bad breakup? Third bad breakup? LEGACY "
+            "INK TATTOO commemorates all of it, permanently, at two a.m. "
+            "prices during business hours. Custom lettering, "
+            "questionable spelling, a laser-removal punch card we hope "
+            "you never need but definitely will. Run by a woman who's "
+            "seen your exact tattoo four times this month."
         ),
     ),
     AdSpot(
-        slug="diamond-capital",
-        title="Diamond Capital Advisors",
-        tags=["financial"],
-        voice_id="jHprmvvyQreWpRuutdmV",
-        voice_character="Smooth, authoritative trusted-advisor. Wealth-manager sincerity.",
+        slug="gm-mode",
+        title="GM Mode",
+        tags=["betting-parody", "satire"],
+        voice_id="llNlEi50DSCIEuoOIaH7",  # Slick, fast-talking hustler, Vegas-pitchman
+        voice_character=(
+            "Slick, self-aware Vegas hustler. Fast-talking, winking at "
+            "the camera the whole time. GTA-style betting-app satire."
+        ),
         copy=(
-            "Crypto crashed. Your IRA hasn't moved since 2019. Your fantasy "
-            "team's worth more than your portfolio. DIAMOND CAPITAL ADVISORS. "
-            "We manage your money like you manage your bullpen. With "
-            "confidence, regret, and a strong opinion. First consultation "
-            "is free."
+            "Think you know ball better than the app? Prove it. GM "
+            "MODE, the betting platform that turns your gut feeling into "
+            "a line item. Same-game parlays, in-play odds, a "
+            "notification every time your team blows a lead. Bet "
+            "responsibly, or bet like it's Week 14 and you're desperate. "
+            "First deposit matched. Terms apply, obviously, to you."
         ),
     ),
     AdSpot(
-        slug="pennant-apparel",
-        title="Pennant Apparel",
-        tags=["apparel"],
-        voice_id="PB6BdkFkZLbI39GHdnbQ",
-        voice_character="Bright, enthusiastic, slightly preppy. Golf-sweater guy.",
+        slug="bullpen-reserve",
+        title="Bullpen Reserve Bourbon",
+        tags=["spirits", "satire"],
+        voice_id="onwK4e9ZLuTAKqWW03F9",  # Daniel — Steady Broadcaster, British
+        voice_character=(
+            "Slow, deliberate luxury-spirits voiceover. Every consonant "
+            "earned, like the Walk-Off Watches read but for bourbon. "
+            "GTA-style premium-goods satire."
+        ),
         copy=(
-            "Still wearing cotton tees to the ballpark? Embarrassing. "
-            "PENNANT APPAREL. Moisture-wicking, team-branded, game-ready "
-            "gear for guys who sweat through box scores. Fifteen percent "
-            "off your first order. Look like you played D-1. Even if you "
-            "peaked in rec league."
+            "Aged twelve years in oak, same as your closer's fastball "
+            "has aged out of relevance. BULLPEN RESERVE BOURBON. Small "
+            "batch, single barrel, bottled the week a manager finally "
+            "admitted the rebuild wasn't working. Notes of caramel, "
+            "regret, and a save blown in extras. Drink it neat. Drink it "
+            "during extra innings. We won't judge the pace."
         ),
     ),
     AdSpot(
-        slug="big-league-tax",
-        title="Big League Tax",
-        tags=["tax", "service"],
-        voice_id="DwI0NZuZgKu8SNwnpa1x",
-        voice_character="No-nonsense, Brooklyn-accent, just-get-it-done energy.",
+        slug="nightcap-advance",
+        title="Nightcap Advance",
+        tags=["financial", "satire"],
+        voice_id="cgSgspJ2msm6clMCkdW9",  # Jessica — Playful, Bright, Warm
+        voice_character=(
+            "Bright, cheerful, warm delivery selling a payday loan with "
+            "zero irony. GTA-style predatory-fintech satire — the smile "
+            "is the whole joke."
+        ),
         copy=(
-            "April fifteenth, pal. It's here. BIG LEAGUE TAX. Our agents "
-            "file faster than your closer blows a save. No appointment, no "
-            "attitude, no judgment about your W-9 situation. Walk in. Walk "
-            "out. We handle the rest. Now accepting crypto losses."
+            "Payday's five days out and your waiver claim already went "
+            "through. NIGHTCAP ADVANCE fronts you two hundred dollars in "
+            "ninety seconds, no credit check, no judgment, modest weekly "
+            "fee that compounds like a bad bullpen. Approved instantly. "
+            "Repaid eventually. We believe in your next paycheck more "
+            "than you do."
         ),
     ),
     AdSpot(
-        slug="peak-performance-max",
-        title="Peak Performance Max",
-        tags=["supplement", "wellness", "cheeky"],
-        voice_id="V0cljQmo7wpx8LTdbqfJ",
-        voice_character="Urgent late-night infomercial. Act-now! energy.",
-        copy=(
-            "Feeling tired? Sluggish? Getting out-lapped by guys half your "
-            "age? PEAK PERFORMANCE MAX. A daily blend of zinc, magnesium, "
-            "and three herbs we can't pronounce. Results in thirty days or "
-            "your money back. Ask your doctor. Or don't. We're not your "
-            "doctor."
+        slug="apex-longevity",
+        title="Apex Longevity Lab",
+        tags=["wellness", "woman-led", "satire"],
+        voice_id="hpp4J3VqNfWAUOO0d1Us",  # Bella — Professional, Bright
+        voice_character=(
+            "Warm, professional founder-confidence, same register as the "
+            "old MVP Mama Wellness spot. Sells biohacking pseudoscience "
+            "with total conviction. GTA-style wellness-clinic satire."
         ),
-    ),
-    AdSpot(
-        slug="rookie-zzzs",
-        title="Rookie ZZZs Sleep Spray",
-        tags=["sleep"],
-        voice_id="j05EIz3iI3JmBTWC3CsA",
-        voice_character="Calm, soothing, nearly ASMR. Intentional contrast for comedy.",
         copy=(
-            "Tossing and turning after another bullpen meltdown? ROOKIE "
-            "ZZZs. Pillow spray infused with lavender, chamomile, and the "
-            "sweet scent of not watching the highlights. Spritz it. Sleep "
-            "it off. Wake up ready to lose again tomorrow. Non-habit "
-            "forming. We hope."
-        ),
-    ),
-    AdSpot(
-        slug="dugout-eats",
-        title="Dugout Eats",
-        tags=["food", "delivery"],
-        voice_id="dlGxemPxFMTY7iXagmOj",
-        voice_character="Chipper, cheerful ad-read. Like a food-truck jingle.",
-        copy=(
-            "Game's on. You're starving. Takeout's cold. DUGOUT EATS "
-            "delivers stadium-quality hot dogs, nachos, and suspicious "
-            "pretzels to your couch in twenty minutes. No tip, no chat, no "
-            "judgment about ordering four dogs. Get the app. Eat like you "
-            "earned it."
+            "I'm a former ER nurse and the founder of APEX LONGEVITY "
+            "LAB. IV drips, cryotherapy, a blood panel we grade like "
+            "Statcast, barrel rate for your biomarkers. Membership's "
+            "four hundred a month. The science is emerging. The "
+            "marketing is not. You'll leave feeling optimized. Whether "
+            "you are is between you and your actual doctor."
         ),
     ),
 ]

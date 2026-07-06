@@ -176,13 +176,56 @@ class StatCategoryRecord:
 
 
 @dataclass
+class TeamMomentum:
+    """Recent-form record over the last N played weeks.
+
+    Distinct from `H2HRecord` (season-cumulative) — momentum measures the
+    most recent streak, which Act 2 uses to flag heaters vs slumps in the
+    standings tour.
+    """
+    team_key: str
+    name: str
+    manager: str
+    weeks_covered: list[int]
+    wins: int
+    losses: int
+    ties: int
+    cat_wins: int
+    cat_losses: int
+    cat_ties: int
+
+
+@dataclass
+class HistoricalAdd:
+    """A player added 3-4 weeks ago, joined with their stats since.
+
+    Used for Act 3's "look-back" topic — did the add work out? — and as
+    fact-checker ground truth for any look-back stat claim.
+    """
+    player_key: str
+    player_name: str
+    position: str
+    team_abbr: str
+    added_week: int
+    weeks_ago: int
+    fantasy_team_key: str
+    fantasy_team_name: str
+    manager: str
+    still_on_roster: bool
+    selected_position: str
+    availability_tag: str
+    season_stats: dict[str, str]
+    last30_stats: dict[str, str]
+
+
+@dataclass
 class DataPack:
     meta: DataPackMeta
     categories: list[StatCategoryRecord]
     teams: list[dict]  # team_key, name, manager
     roto_standings: list[RotoEntry]
     h2h_records: list[H2HRecord]
-    power_rankings: list[PowerRanking]
+    power_rankings: list[PowerRanking]  # season-cumulative all-play
     target_week_matchups: list[MatchupRecord]
     rosters: list[TeamRoster]
     # Rosters AS OF the target week, with each player's stats FOR that week.
@@ -196,6 +239,17 @@ class DataPack:
     # script writer can speak to both year-to-date production and recent
     # form when recommending Act 3 pickups.
     free_agents: list[RosterPlayer] = field(default_factory=list)
+    # Per-team record over the last N played weeks. Powers Act 2's
+    # momentum framing (teams on a heater vs in a slump).
+    team_momentum: list[TeamMomentum] = field(default_factory=list)
+    # Adds from 3-4 weeks ago + their stats since. Powers Act 3's
+    # rotating "look-back" topic.
+    historical_adds: list[HistoricalAdd] = field(default_factory=list)
+    # Single-week all-play power rankings for the target week — the "who
+    # had the best week" view Act 1 uses. Distinct from `power_rankings`
+    # (season-cumulative). Empty for older datapacks built before this
+    # field existed.
+    weekly_power_rankings: list[PowerRanking] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -356,12 +410,255 @@ def _h2h_records(
     return list(recs.values())
 
 
+# How many recent played weeks team-momentum aggregates over. Sized for
+# "the last few weeks" without bleeding into early-season noise. If the
+# season has played fewer weeks than this, the window auto-shortens.
+_MOMENTUM_WINDOW = 5
+
+# How many weeks back to look for "historical adds" — players added far
+# enough ago that there's meaningful data on how they've performed for the
+# team that picked them up. Inclusive of both endpoints.
+_HISTORICAL_ADD_WEEKS_AGO_MIN = 3
+_HISTORICAL_ADD_WEEKS_AGO_MAX = 4
+
+
+def _team_momentum(
+    all_matchups: list[Matchup],
+    teams: list[TeamStats],
+    categories: list[StatCategory],
+    target_week: int,
+    *,
+    window: int = _MOMENTUM_WINDOW,
+) -> list[TeamMomentum]:
+    """Aggregate each team's record over the last `window` played weeks.
+
+    Considers postevent matchups in weeks (target_week - window + 1 .. target_week)
+    inclusive. Auto-shortens when the season has played fewer weeks. Same
+    win/loss attribution logic as `_h2h_records` (Yahoo's `winner_team_key`
+    is authoritative over local category-count derivations).
+    """
+    window_start = max(1, target_week - window + 1)
+    weeks_in_window = set(range(window_start, target_week + 1))
+    scored = _scored(categories)
+
+    recs: dict[str, TeamMomentum] = {
+        t.team_key: TeamMomentum(
+            team_key=t.team_key, name=t.name, manager=t.manager,
+            weeks_covered=[],
+            wins=0, losses=0, ties=0,
+            cat_wins=0, cat_losses=0, cat_ties=0,
+        )
+        for t in teams
+    }
+    covered: dict[str, set[int]] = {t.team_key: set() for t in teams}
+
+    for m in all_matchups:
+        if m.week not in weeks_in_window:
+            continue
+        if m.status != "postevent":
+            continue
+        a_cw = b_cw = tw = 0
+        for c in scored:
+            w = _category_winner(
+                m, c,
+                m.team_a.stats.get(c.stat_id, "0"),
+                m.team_b.stats.get(c.stat_id, "0"),
+            )
+            if w == "a":
+                a_cw += 1
+            elif w == "b":
+                b_cw += 1
+            else:
+                tw += 1
+
+        if m.is_tied or not m.winner_team_key:
+            a_outcome, b_outcome = "t", "t"
+        elif m.winner_team_key == m.team_a.team_key:
+            a_outcome, b_outcome = "w", "l"
+        elif m.winner_team_key == m.team_b.team_key:
+            a_outcome, b_outcome = "l", "w"
+        else:
+            a_outcome, b_outcome = "t", "t"
+
+        for tk, opp_cw, own_cw, own_t, outcome in (
+            (m.team_a.team_key, b_cw, a_cw, tw, a_outcome),
+            (m.team_b.team_key, a_cw, b_cw, tw, b_outcome),
+        ):
+            r = recs.get(tk)
+            if not r:
+                continue
+            r.cat_wins += own_cw
+            r.cat_losses += opp_cw
+            r.cat_ties += own_t
+            if outcome == "w":
+                r.wins += 1
+            elif outcome == "l":
+                r.losses += 1
+            else:
+                r.ties += 1
+            covered[tk].add(m.week)
+
+    for tk, r in recs.items():
+        r.weeks_covered = sorted(covered[tk])
+    return list(recs.values())
+
+
+def _week_window_timestamps(week_start: str, week_end: str) -> tuple[int, int]:
+    """Return (inclusive start_ts, exclusive end_ts) for a Yahoo week window."""
+    start_ts = int(datetime.fromisoformat(week_start).replace(
+        tzinfo=timezone.utc).timestamp())
+    end_ts = int(datetime.fromisoformat(week_end).replace(
+        tzinfo=timezone.utc).timestamp()) + 86400
+    return start_ts, end_ts
+
+
+def _historical_adds(
+    transactions: list[Transaction],
+    rosters: list[TeamRoster],
+    teams: list[TeamStats],
+    week_dates: dict[int, tuple[str, str]],
+    target_week: int,
+) -> list[HistoricalAdd]:
+    """Find adds from 3-4 weeks ago + join with current roster stats.
+
+    For each successful `add` action whose timestamp falls in week
+    (target_week - 4) or (target_week - 3), determine the fantasy team
+    that picked them up and check whether they're still on that team's
+    roster. Drops are still surfaced (with `still_on_roster=False` and
+    empty stats) since "they cut him after two weeks" is itself a story.
+    """
+    rosters_by_team: dict[str, dict[str, RosterPlayer]] = {
+        r.team_key: {p.player_key: p for p in r.players}
+        for r in rosters
+    }
+    team_meta_by_name: dict[str, TeamStats] = {t.name: t for t in teams}
+
+    out: list[HistoricalAdd] = []
+    seen: set[tuple[str, str, int]] = set()  # (player_key, team_key, added_week)
+
+    for week_offset in range(_HISTORICAL_ADD_WEEKS_AGO_MIN,
+                             _HISTORICAL_ADD_WEEKS_AGO_MAX + 1):
+        add_week = target_week - week_offset
+        if add_week < 1:
+            continue
+        window = week_dates.get(add_week)
+        if not window:
+            continue
+        ws, we = window
+        if not ws or not we:
+            continue
+        start_ts, end_ts = _week_window_timestamps(ws, we)
+
+        for tx in transactions:
+            if tx.status != "successful":
+                continue
+            if not (start_ts <= tx.timestamp < end_ts):
+                continue
+            for p in tx.players:
+                if p.action != "add":
+                    continue
+                # Prefer Yahoo's explicit destination_team_key when present;
+                # fall back to team-name lookup for older payloads.
+                team: TeamStats | None = None
+                if p.to_team_key:
+                    team = next(
+                        (t for t in teams if t.team_key == p.to_team_key),
+                        None,
+                    )
+                if team is None:
+                    team = team_meta_by_name.get(p.to_team)
+                if not team:
+                    continue
+                key = (p.player_key, team.team_key, add_week)
+                if key in seen:
+                    continue
+                seen.add(key)
+                roster_player = rosters_by_team.get(
+                    team.team_key, {}).get(p.player_key)
+                if roster_player is not None:
+                    still_on_roster = True
+                    selected_position = roster_player.selected_position
+                    availability = roster_player.availability_tag
+                    season_stats = dict(roster_player.season_stats)
+                    last30_stats = dict(roster_player.last30_stats)
+                else:
+                    still_on_roster = False
+                    selected_position = ""
+                    availability = "[DROPPED]"
+                    season_stats = {}
+                    last30_stats = {}
+
+                out.append(HistoricalAdd(
+                    player_key=p.player_key,
+                    player_name=p.name,
+                    position=p.position,
+                    team_abbr=p.team_abbr,
+                    added_week=add_week,
+                    weeks_ago=week_offset,
+                    fantasy_team_key=team.team_key,
+                    fantasy_team_name=team.name,
+                    manager=team.manager,
+                    still_on_roster=still_on_roster,
+                    selected_position=selected_position,
+                    availability_tag=availability,
+                    season_stats=season_stats,
+                    last30_stats=last30_stats,
+                ))
+    return out
+
+
 def _power_rankings(
     teams: list[TeamStats], categories: list[StatCategory],
 ) -> list[PowerRanking]:
     """Season-aggregate power rankings (hypothetical all-play record)."""
     h2h = simulate_h2h(teams, categories)
     summaries = compute_power_rankings(h2h, teams)
+    return [
+        PowerRanking(
+            rank=rank, team_key=s.team_key, name=s.name, manager=s.manager,
+            hypothetical_wins=s.total_wins,
+            hypothetical_losses=s.total_losses,
+            hypothetical_ties=s.total_ties,
+            win_pct=s.win_pct,
+        )
+        for rank, s in enumerate(summaries, 1)
+    ]
+
+
+def _weekly_power_rankings(
+    target_matchups: list[Matchup],
+    season_teams: list[TeamStats],
+    categories: list[StatCategory],
+) -> list[PowerRanking]:
+    """Single-week all-play power rankings for the TARGET week only.
+
+    Built from each team's category totals FOR the target week (carried on
+    the target-week matchups), not season-cumulative stats. This is the
+    "who had the best week" view Act 1 leans on — distinct from
+    `_power_rankings`, which is season-long. Early episodes shipped only the
+    season view, so the hosts' "best team this week" framing had no
+    matching ground truth and drifted (e.g. a team's season 13-4 quoted
+    where its weekly 16-1 was meant). Manager names are joined from
+    `season_teams` since matchup-side teams may not carry them.
+    """
+    mgr = {t.team_key: t.manager for t in season_teams}
+    week_teams: list[TeamStats] = []
+    seen: set[str] = set()
+    for m in target_matchups:
+        for side in (m.team_a, m.team_b):
+            if side.team_key in seen:
+                continue
+            seen.add(side.team_key)
+            week_teams.append(TeamStats(
+                team_key=side.team_key, name=side.name,
+                manager=mgr.get(side.team_key, side.manager),
+                points=0.0, projected_points=0.0,
+                stats=dict(side.stats),
+            ))
+    if not week_teams:
+        return []
+    h2h = simulate_h2h(week_teams, categories)
+    summaries = compute_power_rankings(h2h, week_teams)
     return [
         PowerRanking(
             rank=rank, team_key=s.team_key, name=s.name, manager=s.manager,
@@ -443,15 +740,18 @@ async def _fetch_team_target_week_roster(
 def _transaction_records(
     transactions: list[Transaction], week_start: str, week_end: str,
 ) -> list[TransactionRecord]:
-    start_ts = int(datetime.fromisoformat(week_start).replace(
-        tzinfo=timezone.utc).timestamp())
-    # Inclusive end-of-day: +1 day worth of seconds
-    end_ts = int(datetime.fromisoformat(week_end).replace(
-        tzinfo=timezone.utc).timestamp()) + 86400
+    if week_start and week_end:
+        start_ts = int(datetime.fromisoformat(week_start).replace(
+            tzinfo=timezone.utc).timestamp())
+        # Inclusive end-of-day: +1 day worth of seconds
+        end_ts = int(datetime.fromisoformat(week_end).replace(
+            tzinfo=timezone.utc).timestamp()) + 86400
+    else:
+        start_ts = end_ts = None
 
     out: list[TransactionRecord] = []
     for tx in transactions:
-        in_week = start_ts <= tx.timestamp < end_ts
+        in_week = start_ts is not None and start_ts <= tx.timestamp < end_ts
         out.append(TransactionRecord(
             transaction_key=tx.transaction_key,
             type=tx.type,
@@ -638,6 +938,7 @@ async def build_weekly_recap_datapack(
         generated_at=datetime.now(tz=timezone.utc).isoformat(),
     )
 
+    rosters_list = list(rosters)
     return DataPack(
         meta=meta,
         categories=[
@@ -652,10 +953,19 @@ async def build_weekly_recap_datapack(
         roto_standings=_roto_entries(season_teams, categories),
         h2h_records=_h2h_records(all_season_matchups, season_teams, categories),
         power_rankings=_power_rankings(season_teams, categories),
+        weekly_power_rankings=_weekly_power_rankings(
+            target_matchups, season_teams, categories,
+        ),
         target_week_matchups=[_matchup_record(m, categories) for m in target_matchups],
-        rosters=list(rosters),
+        rosters=rosters_list,
         target_week_rosters=list(target_week_rosters),
         transactions=_transaction_records(transactions, week_start, week_end),
         mlb_games=_mlb_game_records(mlb_games_by_date),
         free_agents=free_agents,
+        team_momentum=_team_momentum(
+            all_season_matchups, season_teams, categories, target_week,
+        ),
+        historical_adds=_historical_adds(
+            transactions, rosters_list, season_teams, week_dates, target_week,
+        ),
     )
