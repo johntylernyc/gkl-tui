@@ -259,6 +259,7 @@ async def _run_script_chain_and_render(
             allow_call_in=spec.has_call_in,
             has_announcer=spec.has_announcer,
             expected_bumpers=spec.ad_slots if spec.has_announcer else 0,
+            announcer_in_acts=spec.announcer_in_acts,
         )
 
     log("[4/8] Draft…")
@@ -409,7 +410,7 @@ async def _run_script_chain_and_render(
         slug=episode_slug, segment=spec.slug, week=week_for_state,
         cold_open=rundown.cold_open, sign_off=rundown.sign_off,
         bits=rundown.bits_budget, argument_act=rundown.argument_act,
-        caller=caller_record,
+        caller=caller_record, sid_spots=rundown.sid_spots,
     ))
     save_show_state(state, state_path)
 

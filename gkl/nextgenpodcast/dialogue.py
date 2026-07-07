@@ -193,22 +193,39 @@ async def render_announcer_segments(
 
 # ---------- The Lounge Line (call-in) ----------
 
-# Telephone-bandwidth EQ so the caller sounds like they're on the line.
-# Classic POTS passband (300-3400 Hz) + light compression + a nudge of
-# gain to sit right against the studio-clean host voices.
-_PHONE_FILTER = (
-    "highpass=f=300,lowpass=f=3400,"
-    "acompressor=threshold=-18dB:ratio=3:attack=10:release=120,"
-    "volume=1.4"
+# Telephone-line treatment so the caller sounds like they dialed in, not
+# like a third studio mic. v1 was a bare POTS bandpass (300-3400 Hz) and
+# listeners reported the caller still sounded in-studio — a clean 192k
+# voice with less bass is just a thin studio voice. v2 adds the artifacts
+# that actually read as "phone" to the ear:
+#   - narrowband resample through 8 kHz (the telephone codec's world)
+#   - a light bit-crush for codec grit
+#   - harder compression (phone lines are squashed)
+#   - a faint band-limited pink-noise hiss under the voice, so the line
+#     stays audibly "open" in the caller's pauses
+# Bump _PHONE_FILTER_VERSION whenever this chain changes: it's baked into
+# the cached clip filename, so a chain change re-renders the filtered
+# clips instead of serving stale v1 audio.
+_PHONE_FILTER_VERSION = 2
+
+_PHONE_FILTER_COMPLEX = (
+    "[0:a]aresample=8000,highpass=f=300,lowpass=f=3400,"
+    "acrusher=bits=12:mode=log:mix=0.25,"
+    "acompressor=threshold=-20dB:ratio=4:attack=8:release=90,"
+    "volume=1.6,aresample=44100[voice];"
+    "anoisesrc=color=pink:amplitude=0.013:sample_rate=44100[rawhiss];"
+    "[rawhiss]highpass=f=300,lowpass=f=3400[hiss];"
+    "[voice][hiss]amix=inputs=2:duration=first:normalize=0[mix]"
 )
 
 
 def _apply_phone_filter(src: Path, dst: Path) -> None:
-    """Re-encode a clip through the phone-line EQ chain."""
+    """Re-encode a clip through the phone-line treatment chain."""
     result = subprocess.run(
         [
             "ffmpeg", "-y", "-i", str(src),
-            "-af", _PHONE_FILTER,
+            "-filter_complex", _PHONE_FILTER_COMPLEX,
+            "-map", "[mix]",
             "-codec:a", "libmp3lame", "-b:a", "192k",
             str(dst),
         ],
@@ -257,7 +274,9 @@ async def render_call_in(
                 await generate_tts_to_file(
                     line, caller_voice_id, clean, api_key=api_key,
                 )
-            phoned = work_dir / f"turn_caller_{h}_phone.mp3"
+            phoned = work_dir / (
+                f"turn_caller_{h}_phone_v{_PHONE_FILTER_VERSION}.mp3"
+            )
             if not phoned.exists() or phoned.stat().st_size == 0:
                 _apply_phone_filter(clean, phoned)
             turn_paths.append(phoned)

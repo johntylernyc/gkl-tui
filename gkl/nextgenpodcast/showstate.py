@@ -40,6 +40,7 @@ class EpisodeRecord:
     bits: str = ""         # raw BITS BUDGET text
     argument_act: str = ""
     caller: str = ""       # Lounge Line caller spec line (name/voice/persona)
+    sid_spots: str = ""    # raw SID SPOTS text (stat checks + look-back)
 
 
 @dataclass
@@ -103,6 +104,8 @@ class ShowState:
                 parts.append(f"Argument act: {e.argument_act}")
             if e.bits:
                 parts.append(f"Bits: {e.bits}")
+            if e.sid_spots:
+                parts.append(f"Sid spots: {e.sid_spots}")
             if e.caller:
                 parts.append(f"Lounge Line caller: {e.caller}")
             if e.sign_off:

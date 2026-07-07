@@ -80,6 +80,10 @@ class Rundown:
     def call_in_section(self) -> str:
         return self.sections.get("CALL-IN", "")
 
+    @property
+    def sid_spots(self) -> str:
+        return self.sections.get("SID SPOTS", "")
+
     def caller(self) -> CallerSpec | None:
         """The structured caller line from the CALL-IN section, if any."""
         for ln in self.call_in_section.splitlines():
@@ -110,6 +114,7 @@ class Rundown:
 # every week plus the phone filter keeps the Lounge Line fresh. The
 # studio announcer's voice is reserved (excluded here) so a caller never
 # sounds like Sid Vega introducing them.
+from gkl.nextgenpodcast.ads import VOICE_GENDERS
 from gkl.nextgenpodcast.ads import VOICE_POOL as _AD_VOICE_POOL
 from gkl.nextgenpodcast.showbible import ANNOUNCER_VOICE_ID
 
@@ -119,8 +124,12 @@ CALLER_VOICE_POOL = [
 
 
 def caller_voices_block() -> str:
-    """Prompt-injectable list of caller voices for the showrunner."""
-    return "\n".join(f"- {vid}: {desc}" for vid, desc in CALLER_VOICE_POOL)
+    """Prompt-injectable list of caller voices for the showrunner, with
+    each voice's gender so the pick can match the caller's name/persona."""
+    return "\n".join(
+        f"- {vid} ({VOICE_GENDERS.get(vid, 'unknown')} voice): {desc}"
+        for vid, desc in CALLER_VOICE_POOL
+    )
 
 
 def recent_caller_voices(episode_records, n: int = 4) -> list[str]:
@@ -140,11 +149,25 @@ def resolve_caller_voice(
     preferred: str | None, recent: list[str], *, rng: random.Random | None = None,
 ) -> str:
     """Validate the showrunner's voice pick; fall back to a random fresh
-    voice from the pool when the pick is missing, invalid, or recent."""
+    voice from the pool when the pick is missing, invalid, or recent.
+
+    The fallback keeps the PREFERRED voice's gender when it can: the
+    showrunner already wrote the caller's name and persona around that
+    voice, and a cross-gender substitute ships a "Dennis" who sounds like
+    a "Matilda". Only when no same-gender fresh voice exists (or the
+    preferred pick is unknown) does the fallback widen to the whole pool.
+    """
     pool_ids = [vid for vid, _ in CALLER_VOICE_POOL]
     if preferred in pool_ids and preferred not in recent:
         return preferred
     fresh = [vid for vid in pool_ids if vid not in recent] or pool_ids
+    want_gender = VOICE_GENDERS.get(preferred or "")
+    if want_gender:
+        same_gender = [
+            vid for vid in fresh if VOICE_GENDERS.get(vid) == want_gender
+        ]
+        if same_gender:
+            fresh = same_gender
     return (rng or random).choice(fresh)
 
 

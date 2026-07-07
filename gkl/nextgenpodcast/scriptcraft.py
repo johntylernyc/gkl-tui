@@ -183,6 +183,7 @@ def parse_script(
     allow_call_in: bool = False,
     has_announcer: bool = False,
     expected_bumpers: int = 0,
+    announcer_in_acts: bool = False,
 ) -> Script:
     """Parse `INTRO` / `ACT N` / `BUMPER N` / `CALL-IN` + `<SPEAKER>:`
     lines into a Script.
@@ -201,6 +202,11 @@ def parse_script(
     the announcer may also speak inside CALL-IN (introducing the caller),
     and ANNOUNCER lines may not appear inside an act. Without it, the
     announcer speaker is rejected everywhere.
+
+    With `announcer_in_acts` (requires `has_announcer`), ANNOUNCER turns
+    are additionally allowed inside acts — the rundown-scripted stat
+    checks and look-back spots. Every act must still END on a host: the
+    announcer never carries an act out to a break or the sign-off.
     """
     host_speakers = set(speakers)
     valid_speakers = set(speakers) | {CALLER}
@@ -265,13 +271,17 @@ def parse_script(
         # Speaker/block placement rules.
         if speaker == CALLER and current_kind != "call_in":
             raise ValueError("CALLER line outside the CALL-IN block")
-        if speaker == ANNOUNCER and current_kind not in ("intro", "bumper", "call_in"):
+        announcer_kinds = {"intro", "bumper", "call_in"}
+        if announcer_in_acts:
+            announcer_kinds.add("act")
+        if speaker == ANNOUNCER and current_kind not in announcer_kinds:
             raise ValueError("ANNOUNCER line outside INTRO/BUMPER/CALL-IN")
         if current_kind in ("intro", "bumper") and speaker != ANNOUNCER:
             raise ValueError(
                 f"{current_kind.upper()} block is announcer-only — got {speaker}"
             )
-        if current_kind == "act" and speaker not in host_speakers:
+        act_speakers = host_speakers | ({ANNOUNCER} if announcer_in_acts else set())
+        if current_kind == "act" and speaker not in act_speakers:
             raise ValueError(f"act line must be a host — got {speaker}")
         # The bell cue is only meaningful on a host turn inside an act.
         bell = has_bell_cue(text)
@@ -306,6 +316,14 @@ def parse_script(
     # assert it so a future format change can't silently regress it).
     if acts[-1].turns[-1].speaker not in host_speakers:
         raise ValueError("the final act must end on a host sign-off")
+    # With announcer-in-acts, EVERY act must still hand out on a host —
+    # an act that ends on Sid would cut straight to Sid's own bumper.
+    if announcer_in_acts:
+        for a in acts:
+            if a.turns[-1].speaker not in host_speakers:
+                raise ValueError(
+                    f"act {a.number} must end on a host turn, not the announcer"
+                )
 
     bumper_list: list[list[DialogueTurn]] = []
     if has_announcer:

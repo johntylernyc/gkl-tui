@@ -84,6 +84,10 @@ class SegmentSpec:
     # each break; when set, the script carries an INTRO block plus one
     # BUMPER per ad break.
     has_announcer: bool = False
+    # Allow the announcer to speak INSIDE acts for rundown-scripted spots
+    # (host-initiated stat checks, the look-back bit). Requires
+    # has_announcer; every act still ends on a host.
+    announcer_in_acts: bool = False
 
 
 WEEKLY_RECAP_V2 = SegmentSpec(
@@ -96,6 +100,7 @@ WEEKLY_RECAP_V2 = SegmentSpec(
     word_budget=1780,
     has_call_in=True,
     has_announcer=True,
+    announcer_in_acts=True,
 )
 
 ALL_STAR_DEEP_DIVE = SegmentSpec(

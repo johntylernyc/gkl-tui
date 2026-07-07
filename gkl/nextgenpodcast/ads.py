@@ -53,6 +53,24 @@ VOICE_POOL: list[tuple[str, str]] = [
     ("hpp4J3VqNfWAUOO0d1Us", "Professional founder-confidence woman"),
 ]
 
+# Perceived gender of each pool voice, from the ElevenLabs voice labels
+# (verified against the API 2026-07-07). Used to keep a caller's voice
+# aligned with the persona the showrunner writes — "Dennis from Sheboygan"
+# must not render with a female voice — including when the preferred
+# voice is unavailable and a fallback is drawn.
+VOICE_GENDERS: dict[str, str] = {
+    "dbcih6CX6V58wprWOdS8": "male",     # Paul Davis
+    "cjVigY5qzO86Huf0OWal": "male",     # Eric (Sid Vega — announcer)
+    "pNInz6obpgDQGcFmaJgB": "male",     # Adam
+    "XrExE9yKIg1WjnnlVkGX": "female",   # Matilda
+    "gs0tAILXbY5DNrJrsM6F": "male",     # Jeff
+    "FGY2WhTYpPnrIDTdsKH5": "female",   # Laura
+    "llNlEi50DSCIEuoOIaH7": "male",     # Jamie
+    "onwK4e9ZLuTAKqWW03F9": "male",     # Daniel
+    "cgSgspJ2msm6clMCkdW9": "female",   # Jessica
+    "hpp4J3VqNfWAUOO0d1Us": "female",   # Bella
+}
+
 
 @dataclass
 class NgAdSpot:

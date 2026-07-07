@@ -390,6 +390,35 @@ class TestAnnouncerAndBell:
         with pytest.raises(ValueError):
             parse_script(_ANNOUNCER_RAW, SPEAKERS, expected_acts=3, allow_call_in=True)
 
+    def test_announcer_in_act_allowed_with_flag(self):
+        # A rundown-scheduled Sid spot: host throws, Sid answers, host reacts.
+        raw = _ANNOUNCER_RAW.replace(
+            "ACT 1\nHAWK: My guy, big week.\nWEBB: The numbers agree.\n",
+            "ACT 1\nHAWK: My guy, big week. Bat Boy, settle this.\n"
+            "ANNOUNCER: Fourteen steals to four. Hawk has it right.\n"
+            "WEBB: The numbers agree.\n",
+        )
+        s = parse_script(raw, SPEAKERS, announcer_in_acts=True, **_ANN_KW)
+        speakers = [t.speaker for t in s.acts[0].turns]
+        assert speakers == ["HAWK", "ANNOUNCER", "WEBB"]
+
+    def test_act_ending_on_announcer_rejected(self):
+        raw = _ANNOUNCER_RAW.replace(
+            "ACT 1\nHAWK: My guy, big week.\nWEBB: The numbers agree.\n",
+            "ACT 1\nHAWK: My guy, big week.\n"
+            "ANNOUNCER: Fourteen steals to four.\n",
+        )
+        with pytest.raises(ValueError, match="end on a host"):
+            parse_script(raw, SPEAKERS, announcer_in_acts=True, **_ANN_KW)
+
+    def test_announcer_in_act_still_rejected_by_default(self):
+        raw = _ANNOUNCER_RAW.replace(
+            "ACT 1\nHAWK: My guy, big week.",
+            "ACT 1\nANNOUNCER: Fourteen steals.\nHAWK: My guy, big week.",
+        )
+        with pytest.raises(ValueError, match="ANNOUNCER"):
+            parse_script(raw, SPEAKERS, **_ANN_KW)
+
 
 # Tokens the pipeline provides per segment. Prompt-invariant tests below
 # assert every {token} used in an artifact's prompts is in this set —
@@ -565,6 +594,42 @@ class TestCallerVoices:
             EpisodeRecord(slug="2026-w14", segment="s", week=14),  # no caller
         ]
         assert recent_caller_voices(records) == ["v-new", "v-old"]
+
+    def test_fallback_keeps_preferred_voice_gender(self):
+        # A male caller ("Dennis") whose intended voice is recently used
+        # must fall back to another MALE voice, never a female one — the
+        # w15 episode shipped Dennis on a female voice this way.
+        import random
+        from gkl.nextgenpodcast.ads import VOICE_GENDERS
+        from gkl.nextgenpodcast.showrunner import resolve_caller_voice
+        preferred = "gs0tAILXbY5DNrJrsM6F"  # Jeff (male)
+        assert VOICE_GENDERS[preferred] == "male"
+        for seed in range(25):
+            out = resolve_caller_voice(
+                preferred, recent=[preferred], rng=random.Random(seed),
+            )
+            assert out != preferred
+            assert VOICE_GENDERS[out] == "male", out
+
+    def test_fallback_without_known_gender_uses_whole_pool(self):
+        import random
+        from gkl.nextgenpodcast.showrunner import (
+            CALLER_VOICE_POOL, resolve_caller_voice,
+        )
+        out = resolve_caller_voice("not-a-voice", [], rng=random.Random(3))
+        assert out in {vid for vid, _ in CALLER_VOICE_POOL}
+
+    def test_caller_voices_block_lists_gender(self):
+        from gkl.nextgenpodcast.showrunner import caller_voices_block
+        block = caller_voices_block()
+        assert "(male voice)" in block and "(female voice)" in block
+
+    def test_every_pool_voice_has_a_gender(self):
+        # A pool voice without a gender entry silently weakens both the
+        # showrunner's pick and the gender-aware fallback.
+        from gkl.nextgenpodcast.ads import VOICE_GENDERS, VOICE_POOL
+        for vid, _desc in VOICE_POOL:
+            assert VOICE_GENDERS.get(vid) in ("male", "female"), vid
 
 
 # ---------- datapack (playoff race) ----------

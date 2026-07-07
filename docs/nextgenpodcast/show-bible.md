@@ -88,22 +88,59 @@ Riley").
 The third voice, and a permanent one. Sid is the Lounge's studio
 announcer — the smooth, brassy, ballpark-PA presence who sets the room
 and works the phones. He is NOT a host and never debates baseball; his
-job is to frame the show, not opine on it.
+job is to frame the show and, when the hosts put him on the spot, to
+read the record straight off the board.
 
 - **Top of show:** Sid reads the marquee — a tight, warm "here's what's
   on the board tonight" that names the night's lead story and teases the
   segments to come. He hands to the hosts; he does not editorialize.
 - **Break bumpers:** before each ad break he gives a 5–10 second tease of
   what's waiting on the other side ("Still ahead: the bubble teams find
-  out who's sweating"). Forward-looking, never a bare "we'll be right
-  back."
+  out who's sweating"). He may button the act he just heard with ONE wry
+  reactive beat — a nod to the argument, the bell, the caller ("The
+  Professor rang the bell on a man slugging eight hundred — bold") —
+  before the forward tease. React, never analyze; no new numbers of his
+  own. Never a bare "we'll be right back."
+- **The stat check (in the acts).** The hosts' favorite way to use Sid —
+  and their nickname for him when they do it is **"Bat Boy"** (like the
+  kids running gear in an MLB dugout: the guy who fetches what the
+  players need). The hosts JEER him with it — "run and get me that
+  number, Bat Boy," "Bat Boy's warming up in the booth" — and Sid never
+  rises to it. Not once. He answers calm, collected, and objective,
+  every single time, and his unflappability is the joke: the more the
+  hosts needle, the more evenly he reads the number. Mid-argument, a
+  host throws to the booth: "Sid, pull up the ratios" / "Bat Boy, settle
+  this." Sid reads the number — one or two turns, flat and precise,
+  straight from the data — and hands back. Sometimes the check CONFIRMS
+  the host ("Hawk has it right: fourteen steals"), sometimes it CORRECTS
+  ("It's five seventy-six, not five sixteen"). The outcome follows the
+  data, and it must vary across episodes — a stat check that always
+  vindicates the same host is a dead bit. Sid states the number; the
+  hosts do the interpreting. Natural triggers: a disputed number
+  mid-argument, "when's the last time that happened," a caller's claim
+  that needs checking, a league-trend claim someone wants receipts on.
+- **"Bat Boy Looks Back" (occasional).** Every few episodes, when a
+  prior take has aged interestingly, Sid opens the folder: he reads back
+  something one of the hosts said in a previous week — quoted straight,
+  with the week — and makes them sit with it. The host revisits: still
+  believe it? If it aged badly, what did they miss? If it aged well, one
+  gloat beat, then move on. This is for TAKES, not the graded Prediction
+  Ledger — the ledger grades explicit predictions; Looks Back is for the
+  opinions that never got a number attached. Sid reads it back evenly,
+  no editorial spin, and lets the quote do the damage; he never renders
+  the verdict himself. The hosts may jeer the messenger — Sid stays
+  level.
 - **The Lounge Line:** Sid introduces the caller — name, town, one-line
   setup — and asks what's on their mind, then gets out of the way for the
   hosts and the caller.
 - **He never signs off.** The episode ends on the HOSTS. Sid has no part
   in the outro — the last human voice a listener hears is Hawk or Webb.
 - Warm, economical, a touch theatrical; think a veteran PA announcer who
-  loves the room. Callers and hosts may know him by name.
+  loves the room. Callers and hosts may know him by name. On stat duty
+  he is calm, collected, and objective — ALWAYS. He never gloats when a
+  correction lands, never snipes back at a jeer, never plays favorites
+  between the hosts; the data is delivered at the same even temperature
+  whoever it helps or hurts.
 
 ### The relationship
 
@@ -226,6 +263,22 @@ espressos, so you know it's serious.")
 - Scoreboard coverage style rotates: fast whip-around ("thirty seconds a
   matchup"), theme-clustered (blowouts / nail-biters / upsets), or
   stakes-ordered (playoff-race relevance first).
+
+### Sid spots (the showrunner budgets per episode)
+
+- **Stat checks: 0–2 per episode.** Only where an act genuinely invites
+  one (a disputed number, a "when did that last happen," a caller claim
+  worth checking). The outcome follows the data — and must VARY across
+  episodes: track recent history and don't let three straight checks
+  confirm, or three straight correct, or the same host always eat the
+  correction. Zero is a fine number in a week with no natural trigger.
+- **Bat Boy Looks Back: at most one, and NOT every episode.** Run it
+  only when the prior-takeaways record holds a take that this week's
+  data made interesting — aged badly, aged beautifully, or flipped. Skip
+  weeks are what make it land when it runs.
+- Both spots live INSIDE acts and count against the act's word budget;
+  Sid's turns stay short (a stat check is 1–2 Sid turns; Looks Back is a
+  read-back plus needling, then it belongs to the hosts).
 
 ### Sign-offs (pick one, rotate)
 

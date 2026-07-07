@@ -33,7 +33,17 @@ Episode structure:
   with a phone-line filter on the caller (Sid and the hosts stay
   studio-clean).
 - **Break bumpers (Sid).** Before each ad break, Sid gives a 5–10 second
-  tease of what's on the other side.
+  tease of what's on the other side — optionally buttoned with one wry
+  reactive beat about the act that just ended (react, never analyze).
+- **Sid spots (inside the acts, as budgeted by the showrunner).** The
+  hosts can throw to the booth mid-act: a **stat check** ("Bat Boy,
+  settle this") where Sid reads the official number — sometimes
+  confirming the host, sometimes correcting them — and hands back; and
+  the occasional **"Bat Boy Looks Back"**, where Sid reads back a take
+  a host made in a prior week and the host revisits it. The hosts may
+  jeer him; Sid stays calm, collected, and objective, always. Sid states
+  facts; the hosts do the interpreting. He still never opines and never
+  signs off.
 - **Act 3 — The Race.** The playoff picture. The league's top 8 in the
   OFFICIAL head-to-head standings (category record, ranked by win
   percentage) make the playoffs. Who's safe, who's on the bubble, who's
@@ -267,14 +277,32 @@ one-line setup) and asks what's on their mind; the question or hot take
 (grounded in the fodder's numbers); whether the caller is right or
 confidently wrong; which host takes the caller's side and which pushes
 back; and the correction beat if the caller's numbers are off. Pick a
-voice whose archetype fits the persona and which wasn't used in the last
-few episodes.
+voice whose archetype fits the persona, whose listed GENDER matches the
+caller's name and persona (a "Dennis" on a female voice is a defect, not
+a choice), and which wasn't used in the last few episodes.
+
+**SID SPOTS** — Sid's in-act duty this episode, per the show bible's
+budget (0–2 stat checks; Looks Back at most one and NOT every episode).
+For each stat check, one line:
+`CHECK: <act> | <which host throws to Sid, and the trigger — the
+disputed number, the "when did that last happen", the caller claim> |
+<the official number Sid reads> | <confirms|corrects> <which host>`.
+Outcomes follow the data and must VARY versus the recent-episode history
+(don't let checks always confirm, always correct, or always land on the
+same host). For Looks Back, one line:
+`LOOKBACK: <act> | <the prior-week take Sid reads back, quoted from the
+prior takeaways with its week> | <which host owns it, and whether it
+aged well or badly>` — run it only when the prior takeaways hold a take
+this week's data made interesting; otherwise write `LOOKBACK: none`.
+If no act invites a stat check, write `CHECK: none`.
 
 **BUMPERS** — Sid's two break teases. One line each:
 `BUMPER 1: <5–10s tease of what's after the first break (Act 2 / the
 Lounge Line)>` and `BUMPER 2: <tease of what's after the second break
 (Act 3, the race)>`. Forward-looking, specific, never a bare "we'll be
-right back."
+right back." Each may open with ONE wry reactive button on the act that
+just ended (a nod to the argument, the bell, the caller) — react, never
+analyze, no new numbers.
 
 **NEW LEDGER ENTRIES** — the explicit predictions this episode should
 plant (the Act 3 fall/rise picks always; a Hawk Lock if Act 1 or the
@@ -289,14 +317,14 @@ planted in NEW LEDGER ENTRIES). Bits not listed here must not appear.
 **SIGN-OFF** — pick one style from the playbook, not the one used last
 episode, with a one-line execution note.
 
-Keep the rundown under 800 words. Be decisive — the script writer
+Keep the rundown under 850 words. Be decisive — the script writer
 follows it.
 
 ### User prompt
 
 Tokens substituted at call time: `{league_name}`, `{target_week}`,
 `{show_bible}`, `{suggested_topics}`, `{episode_history}`,
-`{ledger}`, `{caller_voices}`.
+`{ledger}`, `{caller_voices}`, `{prior_takeaways}`.
 
 Build the rundown for **{league_name}**, Week **{target_week}**.
 
@@ -331,6 +359,14 @@ Prediction Ledger (open predictions and running records):
 {ledger}
 <<<LEDGER_END>>>
 
+Prior episodes — takeaways (the record of what the hosts SAID in recent
+weeks; source material for SID SPOTS' Looks Back — quote takes from
+here, never invent one):
+
+<<<PRIOR_TAKEAWAYS_START>>>
+{prior_takeaways}
+<<<PRIOR_TAKEAWAYS_END>>>
+
 Produce the rundown now, beginning directly with the COLD OPEN section.
 
 ---
@@ -359,10 +395,32 @@ listener could identify the speaker with the name tags removed. Neither
 is a yes-man: when the rundown's argument act lands, the friction is
 real, position-driven, and persona-consistent.
 
-`ANNOUNCER` is Sid Vega, the booth announcer — and he appears ONLY in
-the INTRO block, the BUMPER blocks, and once inside CALL-IN to introduce
-the caller. He never appears inside an act and never signs off. Sid sets
-the room and teases segments; he does not analyze baseball or take sides.
+`ANNOUNCER` is Sid Vega, the booth announcer — he appears in the INTRO
+block, the BUMPER blocks, once inside CALL-IN to introduce the caller,
+and inside an act ONLY where the rundown's SID SPOTS schedules him (a
+stat check or a Looks Back). He never signs off, and every act still
+ends on a host. Sid sets the room, teases segments, and reads numbers
+when the hosts put him on the spot; he does not analyze baseball or
+take sides.
+
+**Sid spots (from the rundown — write them only where scheduled)**
+
+- **Stat check:** a HOST initiates, mid-argument, in character ("Sid,
+  pull up the ratios." / "Bat Boy, settle this."). Sid answers in one
+  or two turns — flat, precise, just the number from the data — then
+  the hosts interpret it. The rundown says whether the check CONFIRMS
+  or CORRECTS and which host it lands on; play the human beat either
+  way (vindication is a gloat; a correction costs the loser a wince).
+  "Bat Boy" is the hosts' jeering nickname for Sid on stat duty — the
+  dugout kid who fetches what the players need. The hosts rib him;
+  Sid NEVER rises to it. He answers calm, collected, and objective,
+  every time — his unflappability under the jeering IS the bit.
+- **Bat Boy Looks Back:** Sid reads back the prior-week take the
+  rundown quotes — verbatim spirit, with the week — evenly, no spin,
+  one turn; the quote does the damage. The host who owns the take
+  revisits it honestly: still holds, or what they missed. Sid never
+  renders the verdict; the hosts do. The hosts may jeer the messenger —
+  Sid stays level.
 
 **The marquee (INTRO block)**: Sid opens the show (after the music) with
 the rundown's MARQUEE — name the lead story, tease the segments to come,
@@ -493,8 +551,9 @@ Starting pitchers resting between starts are never "benched."
 Total ~1,780 words of dialogue; ~535 per act (600 hard ceiling per act);
 the CALL-IN block at most 180 words total. 10-16 turns per act, 4-7
 turns in the call-in. Sid's blocks are tight: INTRO 25–45 words, each
-BUMPER 15–30 words, his CALL-IN intro one turn. Once a point lands, hand
-off.
+BUMPER 15–30 words, his CALL-IN intro one turn, and any in-act SID SPOT
+is 1–2 Sid turns counted inside that act's budget. Once a point lands,
+hand off.
 
 **Format — STRICT**
 
@@ -529,11 +588,12 @@ HAWK: ...
 Only these header lines, in this order: `INTRO`, `ACT 1`, `BUMPER 1`,
 `ACT 2`, `CALL-IN`, `BUMPER 2`, `ACT 3`. Every dialogue line starts with
 `HAWK: `, `WEBB: `, `ANNOUNCER: `, or `CALLER: `. Placement is strict:
-`ANNOUNCER` only in INTRO / BUMPER / CALL-IN (never in an act, never the
-sign-off); `CALLER` only in CALL-IN; acts are hosts only; Act 3 ends on a
-host. One turn per line. The only bracketed token allowed is `[bell]`, on
-a single WEBB act line. No preamble, no epilogue, no markdown, no other
-parentheticals.
+`ANNOUNCER` in INTRO / BUMPER / CALL-IN, plus inside an act ONLY for a
+rundown-scheduled SID SPOT (1–2 turns per spot; never the sign-off);
+`CALLER` only in CALL-IN; EVERY act ends on a host turn, never the
+announcer. One turn per line. The only bracketed token allowed is
+`[bell]`, on a single WEBB act line. No preamble, no epilogue, no
+markdown, no other parentheticals.
 
 ### User prompt
 
@@ -622,6 +682,14 @@ strictly as any host line.
    must agree with the standings facts Act 3 states. A team cannot be
    "outside the playoffs" in the marquee and "holding the eighth seed"
    in Act 3 — fix whichever end contradicts the official standings.
+1d. Sid's stat checks are the show putting a number ON THE RECORD — hold
+   them to the strictest standard in the script. The number Sid reads
+   must match the data pack exactly, and the outcome direction must
+   match reality: if Sid "confirms" a host who is actually wrong, or
+   "corrects" a host who was right, fix the number AND flip the beat so
+   the data decides who wins. A Looks Back read-back must match the
+   prior-takeaways record (right take, right host, right week) — verify
+   it like any continuity claim.
 2. Weekly player-stat claims verify against the "Per-player performance"
    section. Trend/season claims layered on a weekly line verify against
    the season/last-30 form table. Team category-rank color verifies
@@ -794,6 +862,15 @@ Work from the show bible and the rundown in your prompt.
    persona (cadence, word choice, energy). The hosts' reactions to the
    caller are a prime comedy surface: Hawk's delight, Webb's pain, or
    vice versa. Keep the correction beat intact if the caller is wrong.
+8b. **Sid on stat duty.** The stat-check exchange is a comedy surface
+   with hard rails: the throw and the jeer ("Bat Boy, settle this")
+   and the hosts' reaction to the verdict are yours to sharpen; Sid's
+   own line stays calm, collected, and objective — the comedy is his
+   even temperature against the hosts' needling, so never give him a
+   comeback, a gloat, or an edge. Never alter the number he reads or
+   which host the outcome lands on. Same for Looks Back: punch up the
+   hosts' squirm and the jeering of the messenger, not the quoted take
+   and never Sid's delivery.
 9. **Spoken-form discipline.** Keep spelled-out stat names and spoken-form
    numbers exactly as written; keep "head to head"; never re-abbreviate.
 
@@ -853,8 +930,12 @@ that, and it's why you have an explicit protected list.
 
 - The "my guy" greeting in the cold open
 - Sid's INTRO marquee, both BUMPER blocks, and his CALL-IN intro — keep
-  them (tighten wording only; never cut a block, never let Sid drift into
-  an act or the sign-off)
+  them (tighten wording only; never cut a block, never let Sid drift
+  into the sign-off)
+- Sid's in-act spots (stat checks, Looks Back): the throw, Sid's answer,
+  and the hosts' reaction all stay — a stat check with the reaction cut
+  is dead air with a number in it. Never add Sid turns of your own, and
+  every act still ends on a host
 - The ENTIRE CALL-IN block: Sid's intro, the caller's take, the hosts'
   split reaction, the correction beat, and the hosts' thank-you
 - The `[bell]` cue — leave it exactly on its WEBB line
@@ -921,8 +1002,12 @@ pipeline to maintain the Prediction Ledger. Extract only what was said
 and who said it. Add nothing.
 
 Speakers are HAWK and WEBB, plus a one-off CALLER in the Lounge Line
-block. Caller takes belong to the CALLER — never attribute them to HAWK
-or WEBB in "Takes worth revisiting".
+block and the ANNOUNCER (Sid, the booth). Caller takes belong to the
+CALLER — never attribute them to HAWK or WEBB in "Takes worth
+revisiting". ANNOUNCER lines are facts, not takes — never attribute a
+take to Sid; if a stat check or a "Bat Boy Looks Back" ran, note it
+(and which take it revisited) in `Topics covered` so future episodes
+don't rerun the same one.
 
 **Output format — STRICT.** A single H1 title:
 `Weekly Recap Takeaways — Week {target_week}` (substitute the week), then
