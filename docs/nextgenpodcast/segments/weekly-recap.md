@@ -105,6 +105,17 @@ PRIMARY POOL (prefer these):
    Bench Blunder): player + fantasy team + week line, trend/season context
    only when it changes the read. Call get_statcast_profile for any award
    whose verdict hinges on real-versus-lucky.
+   Bench Blunder discipline — this is a DAILY league: roster tags show
+   TODAY'S lineup, and players rotate to the bench for off-days, rest
+   days, and day-to-day knocks as routine daily management, not weekly
+   strategy. Never claim a manager "benched X all week" or "left
+   production on the pine" from a single-day snapshot. A Bench Blunder
+   needs week-long evidence: compare both players' FULL-MATCHUP recorded
+   stats for the target week (not 30-day or season lines), and only call
+   it when the gap is week-long and unambiguous. When you can't establish
+   how many days a player actually sat, skip the award — pick a different
+   one. Getting this wrong publicly accuses a manager of a mistake they
+   didn't make.
 3. Regression Watch — 2-3 rostered players whose surface stats and
    Statcast have diverged, framed as who's real, who's lucky, who's due —
    commentary, not a transaction order. Call get_statcast_profile for
@@ -112,14 +123,20 @@ PRIMARY POOL (prefer these):
    "Regression Bell" bit — note in your output which single player most
    deserves the bell.
 
-OCCASIONAL POOL (only when a move is glaring): free-agent picks (two picks
-fitting two DIFFERENT teams; get_free_agents sort=AR count=30 +
-get_statcast_profile), trade pairings (two pairings across FOUR different
-teams; find_trade_targets / discover_trade_scenarios), look-back on past
-adds (two players, different teams, from the Historical adds data).
+OCCASIONAL POOL: free-agent picks (two picks fitting two DIFFERENT
+teams; get_free_agents sort=AR count=30 + get_statcast_profile), trade
+pairings (two pairings across FOUR different teams; find_trade_targets /
+discover_trade_scenarios), look-back on past adds (two players,
+different teams, from the Historical adds data).
 
 Selection: material strength first, primary pool preferred, variety versus
 last week as tiebreaker, and don't let the same team headline both topics.
+Cadence: an occasional-pool topic should run roughly every third episode
+when the material supports it — the prior takeaways in your prompt list
+which Act 2 topics each recent episode ran; if it's been three-plus
+episodes of primary-pool-only, promote the strongest occasional topic
+this week. The transaction wire is league content the show has been
+under-serving; don't let it starve.
 Output exactly two `### Topic Name` blocks using the canonical labels:
 `### Category Kings`, `### Weekly Awards`, `### Regression Watch`,
 `### Free-agent picks`, `### Trade pairings`, `### Look-back on past adds`.
@@ -158,6 +175,19 @@ the CATEGORY RECORD, ranked by win percentage. Use get_h2h_standings.
 
 Output shape for Act 3: `### The race` then `### Week ahead`.
 
+**Wire report (small, most weeks)**
+
+After Act 3, add a section `## Wire report`: the week's 1-2 most
+interesting waiver-wire or free-agency moves (an add the league should
+notice, a surprising drop, a claim that signals a team's plan), each as
+2-3 sentences — the move, the manager, the one number that makes it
+interesting, and a quick verdict (shrewd, desperate, or head-scratching).
+This is a QUICK beat for the hosts, not a topic: the showrunner will
+give it a few sentences inside an act. Pull from the target week's
+transactions; if the week's wire was genuinely dead, write `(quiet wire
+this week)` and nothing else. Don't duplicate a move already used as an
+Act 2 topic or Lounge Line fodder.
+
 **Lounge Line fodder (final section)**
 
 After Act 3, add a section `## Lounge Line fodder` with 2-3 candidate
@@ -182,20 +212,29 @@ Tone: sports analyst, specific over general, numbers over vibes. No
 tables, no shorthand like ΔRoto; plain sentences the hosts can speak.
 
 Output format: structured markdown. `## Act 1`, `## Act 2`, `## Act 3`,
-`## Lounge Line fodder` top-level headers; `### Story Title` blocks
-beneath the acts; hook, backing numbers, Statcast context, banter beats
-under each. Begin directly with `## Act 1`; no preamble, and end after
-the Lounge Line fodder section.
+`## Wire report`, `## Lounge Line fodder` top-level headers; `### Story
+Title` blocks beneath the acts; hook, backing numbers, Statcast context,
+banter beats under each. Begin directly with `## Act 1`; no preamble,
+and end after the Lounge Line fodder section.
 
 ### User prompt
 
 Tokens substituted at call time: `{league_name}`, `{season}`,
-`{target_week}`, `{week_start}`, `{week_end}`, `{playoff_spots}`.
+`{target_week}`, `{week_start}`, `{week_end}`, `{playoff_spots}`,
+`{prior_takeaways}`.
 
 Produce the suggested-topics spine for the Weekly Recap episode covering
 **{league_name}**, Week **{target_week}** of the **{season}** season
 ({week_start} through {week_end}). The top {playoff_spots} teams in the
 official head-to-head standings make the playoffs.
+
+Prior episodes — takeaways (each lists which Act 2 topics ran; use this
+for the occasional-pool cadence check, and to avoid re-flagging the same
+players two weeks running):
+
+<<<PRIOR_TAKEAWAYS_START>>>
+{prior_takeaways}
+<<<PRIOR_TAKEAWAYS_END>>>
 
 Before writing anything, pull via tools:
 
@@ -259,6 +298,11 @@ spine beats, never invent facts); the scoreboard coverage style for Act 1
 (rotate versus recent episodes); where the act's fun beat lives (a bit,
 a tease, a groan — name it); the handoff idea into the break (vary it —
 never the bare "we'll be right back").
+When the spine carries a `Wire report`, give it a QUICK beat — a few
+sentences inside Act 1 or Act 2, wherever it flows — most weeks. It's
+seasoning (one move, one number, one verdict, move on), never a third
+topic; skip it only when the spine says the wire was quiet or the act is
+already over budget.
 
 **ARGUMENT ACT** — name the single act carrying the genuine disagreement,
 what the two positions are, who holds which (consistent with their
@@ -466,6 +510,11 @@ contractions, energy, maybe one tease at the hosts.
   standings into narrative: tiers, gaps, stakes.
 - Short reactions are turns: "Ring it." "No." "Say the record." Real
   conversation has fragments.
+- Excitement is pace, not volume. At most ONE exclamation point per
+  turn, roughly three per act, never stacked ("!!"), and never ALL-CAPS
+  a word for emphasis — the TTS reads those as screaming, and Hawk's
+  voice tips over first. Write his excitement as fast fragments,
+  interruptions, and vivid specifics instead of exclamation points.
 - Reactions live in the WORDS, not stage directions. Bracketed audio tags
   are NOT spoken (they're stripped before TTS), so don't write them —
   write the actual line a host would say instead. The ONE exception is the
@@ -534,7 +583,11 @@ rank. Matchup scorelines and playoff seeds come from the DATA SUMMARY's
 official sections verbatim — when the story spine and the data summary
 disagree on a score or a seed, the data summary wins (official results
 include league rules like the weekly innings minimum, which the spine's
-narrative may have missed).
+narrative may have missed). Bench/start claims: this is a DAILY league —
+lineup tags are a single-day snapshot, so never say a manager benched or
+rode a player "all week" unless the spine explicitly establishes it;
+sitting a player a day or two (rest, day-to-day, no game) is routine,
+not a story.
 
 **Pronunciation — written for the ear**
 
@@ -690,6 +743,18 @@ strictly as any host line.
    the data decides who wins. A Looks Back read-back must match the
    prior-takeaways record (right take, right host, right week) — verify
    it like any continuity claim.
+1e. Bench/lineup claims (Bench Blunder, "rode the pine", "sat him all
+   week", "left production on the bench"): this is a DAILY league, and
+   the roster tags in the data are a single-day snapshot. Verify any
+   week-long benching claim against the per-player WEEK stats: if the
+   supposedly benched player recorded a substantial share of the week
+   (he was clearly in the lineup most days), the claim is false —
+   soften it to what the data supports ("sat a day or two") or cut the
+   beat entirely. Also confirm the numbers quoted for both players in a
+   bench comparison come from the SAME window (the matchup week), not a
+   30-day line dressed up as a weekly one. Day-to-day rest, injury
+   maintenance, and no-game days are routine daily management — never
+   let the script frame them as a manager's week-long blunder.
 2. Weekly player-stat claims verify against the "Per-player performance"
    section. Trend/season claims layered on a weekly line verify against
    the season/last-30 form table. Team category-rank color verifies
@@ -873,6 +938,12 @@ Work from the show bible and the rundown in your prompt.
    and never Sid's delivery.
 9. **Spoken-form discipline.** Keep spelled-out stat names and spoken-form
    numbers exactly as written; keep "head to head"; never re-abbreviate.
+10. **Volume control.** Punching up must not add exclamation points —
+   sharpen with word choice and rhythm, not volume. Enforce the energy
+   budget on the way through: at most one "!" per turn (~three per act),
+   no stacked "!!", no ALL-CAPS emphasis words; convert overflow
+   exclamations into dashes, fragments, or periods. A Hawk line that
+   only works shouted isn't punched up yet.
 
 **Hard limits**
 

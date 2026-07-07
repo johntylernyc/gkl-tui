@@ -209,7 +209,8 @@ def _patch_common(
         out_path.write_bytes(b"call-in")
         return sum(len(t.line) for t in turns)
 
-    def fake_select(data_root, assets_root, league_key, n):
+    def fake_select(data_root, assets_root, league_key, n,
+                    exclude_voice_ids=frozenset()):
         paths = []
         for i in range(n):
             p = assets_root / "podcast" / "ads" / "library" / f"fake-{i}.mp3"

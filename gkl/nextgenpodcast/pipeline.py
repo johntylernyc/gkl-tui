@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from gkl.nextgenpodcast.ads import (
-    NgAdSpot, active_spots, load_library, rotation_path_for_league,
+    NgAdSpot, airable_spots, load_library, rotation_path_for_league,
 )
 from gkl.nextgenpodcast.datapack import (
     build_team_season_pack, build_weekly_race_datapack, format_playoff_race,
@@ -134,11 +134,18 @@ def load_prior_takeaways(
 
 def _select_ads(
     data_root: Path, assets_root: Path, league_key: str, n: int,
+    *, exclude_voice_ids: set[str] = frozenset(),
 ) -> tuple[list[str], list[Path]]:
     """Prefer the v2 generated library (rendered spots only); fall back to
-    the v1 committed library so episodes render before the first v2 batch."""
+    the v1 committed library so episodes render before the first v2 batch.
+
+    Cast voices (Hawk, Webb, Sid) never air as ads, and per-episode
+    exclusions (this week's Lounge Line caller voice) are filtered too —
+    `airable_spots` enforces both."""
     v2_lib = [
-        s for s in active_spots(load_library())
+        s for s in airable_spots(
+            load_library(), exclude_voice_ids=exclude_voice_ids,
+        )
         if s.asset_path(assets_root).exists()
     ]
     if len(v2_lib) >= n:
@@ -373,6 +380,7 @@ async def _run_script_chain_and_render(
     # the caller's turns inside render_call_in.
     call_in_path: Path | None = None
     caller_record = ""
+    caller_voice = ""
     if spec.has_call_in:
         caller_spec = rundown.caller()
         recent = recent_caller_voices(state.episodes)
@@ -390,6 +398,7 @@ async def _run_script_chain_and_render(
 
     ad_slugs, ad_paths = _select_ads(
         data_root, assets_root, state_path.parent.parent.name, spec.ad_slots,
+        exclude_voice_ids={caller_voice} if caller_voice else frozenset(),
     )
     log(f"       ads: {', '.join(ad_slugs)}")
 
@@ -476,21 +485,6 @@ async def generate_weekly_episode(
     draft_summary = build_data_summary(pack.base, include_player_stats=False) + race_block
     checker_summary = build_data_summary(pack.base, include_player_stats=True) + race_block
 
-    log("[2/8] Skipper seed…")
-    tokens: dict[str, str] = {
-        "league_name": league.name,
-        "season": league.season,
-        "target_week": str(target_week),
-        "week_start": pack.base.meta.week_start,
-        "week_end": pack.base.meta.week_end,
-        "playoff_spots": str(config.playoff_spots),
-    }
-    spine = await run_seed(
-        api, league, categories, spec.artifact, tokens,
-        user_team_key=user_team_key, user_team_name=user_team_name,
-    )
-    (episode_dir / "suggested-topics.md").write_text(spine)
-
     state_path = state_path_for_league(data_root, league.league_key)
     state = load_show_state(state_path)
     prior = load_prior_takeaways(
@@ -503,11 +497,28 @@ async def generate_weekly_episode(
         "       continuity: no prior episodes"
     )
 
+    log("[2/8] Skipper seed…")
+    tokens: dict[str, str] = {
+        "league_name": league.name,
+        "season": league.season,
+        "target_week": str(target_week),
+        "week_start": pack.base.meta.week_start,
+        "week_end": pack.base.meta.week_end,
+        "playoff_spots": str(config.playoff_spots),
+        # The seed sees prior takeaways (each lists the Act 2 topics that
+        # ran) so the occasional-pool cadence check has a record.
+        "prior_takeaways": prior or "(no prior episodes)",
+    }
+    spine = await run_seed(
+        api, league, categories, spec.artifact, tokens,
+        user_team_key=user_team_key, user_team_name=user_team_name,
+    )
+    (episode_dir / "suggested-topics.md").write_text(spine)
+
     tokens.update({
         "suggested_topics": spine,
         "data_summary": draft_summary,
         "checker_data_summary": checker_summary,
-        "prior_takeaways": prior or "(no prior episodes)",
         "show_bible": load_show_bible(config.show_bible_path),
         "episode_history": state.history_block(),
         "ledger": state.ledger_block(league.season),

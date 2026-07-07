@@ -356,10 +356,21 @@ def parse_script(
     )
 
 
+_STACKED_BANG_PAT = re.compile(r"!{2,}")
+
+
+def _tame_exclamations(line: str) -> str:
+    """Collapse stacked exclamation marks — "!!" reads as screaming to the
+    TTS voice, and one bang carries the excitement fine."""
+    return _STACKED_BANG_PAT.sub("!", line)
+
+
 def normalize_script_for_tts(script: Script) -> Script:
     """v1's deterministic pronunciation safety net, applied per line.
     Audio tags contain no stat abbreviations, so they pass through."""
-    return script.map_lines(normalize_line_for_tts)
+    return script.map_lines(
+        lambda line: _tame_exclamations(normalize_line_for_tts(line))
+    )
 
 
 # ---------- Prompt loading + the Claude call ----------

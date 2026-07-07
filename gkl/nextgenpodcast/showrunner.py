@@ -110,16 +110,17 @@ class Rundown:
 # ---------- Caller voice pool ----------
 
 # Callers draw from the same account voices the ad library casts from —
-# distinct archetypes, none of them a host voice. A new caller voice
-# every week plus the phone filter keeps the Lounge Line fresh. The
-# studio announcer's voice is reserved (excluded here) so a caller never
-# sounds like Sid Vega introducing them.
+# distinct archetypes, none of them a cast voice. A new caller voice
+# every week plus the phone filter keeps the Lounge Line fresh. Every
+# cast voice (Hawk, Webb, Sid Vega) is reserved so a caller never sounds
+# like one of the show's own characters phoning in.
 from gkl.nextgenpodcast.ads import VOICE_GENDERS
-from gkl.nextgenpodcast.ads import VOICE_POOL as _AD_VOICE_POOL
-from gkl.nextgenpodcast.showbible import ANNOUNCER_VOICE_ID
+from gkl.nextgenpodcast.ads import VOICE_POOL as _ACCOUNT_VOICE_POOL
+from gkl.nextgenpodcast.showbible import CAST_VOICE_IDS
 
 CALLER_VOICE_POOL = [
-    (vid, desc) for vid, desc in _AD_VOICE_POOL if vid != ANNOUNCER_VOICE_ID
+    (vid, desc) for vid, desc in _ACCOUNT_VOICE_POOL
+    if vid not in CAST_VOICE_IDS
 ]
 
 

@@ -632,6 +632,63 @@ class TestCallerVoices:
             assert VOICE_GENDERS.get(vid) in ("male", "female"), vid
 
 
+class TestVoiceReservation:
+    """Cast voices (Hawk, Webb, Sid) are unique — never ads, never callers."""
+
+    def test_cast_voices_excluded_from_caller_pool(self):
+        from gkl.nextgenpodcast.showbible import CAST_VOICE_IDS
+        from gkl.nextgenpodcast.showrunner import CALLER_VOICE_POOL
+        assert not CAST_VOICE_IDS & {vid for vid, _ in CALLER_VOICE_POOL}
+
+    def test_cast_voices_excluded_from_ad_casting_pool(self):
+        from gkl.nextgenpodcast.ads import AD_VOICE_POOL
+        from gkl.nextgenpodcast.showbible import CAST_VOICE_IDS
+        assert not CAST_VOICE_IDS & {vid for vid, _ in AD_VOICE_POOL}
+
+    def test_airable_spots_blocks_cast_and_episode_voices(self):
+        from gkl.nextgenpodcast.ads import NgAdSpot, airable_spots
+        from gkl.nextgenpodcast.showbible import ANNOUNCER_VOICE_ID
+        lib = [
+            NgAdSpot(slug="sid-voiced", title="t", copy="c",
+                     voice_id=ANNOUNCER_VOICE_ID, voice_character="x"),
+            NgAdSpot(slug="caller-voiced", title="t", copy="c",
+                     voice_id="this-weeks-caller", voice_character="x"),
+            NgAdSpot(slug="clean", title="t", copy="c",
+                     voice_id="some-other-voice", voice_character="x"),
+            NgAdSpot(slug="archived", title="t", copy="c",
+                     voice_id="some-other-voice", voice_character="x",
+                     status="archived"),
+        ]
+        out = airable_spots(lib, exclude_voice_ids={"this-weeks-caller"})
+        assert [s.slug for s in out] == ["clean"]
+
+    def test_committed_library_has_no_cast_voiced_active_spots(self):
+        from gkl.nextgenpodcast.ads import airable_spots, active_spots, load_library
+        lib = load_library()
+        assert {s.slug for s in active_spots(lib)} == {
+            s.slug for s in airable_spots(lib)
+        }
+
+
+class TestHawkVolume:
+    def test_hawk_gets_stability_override(self):
+        from gkl.podcast.assets import DEFAULT_TTS_VOICE_SETTINGS
+        hawk = DEFAULT_CAST.voice_settings_for("HAWK")
+        webb = DEFAULT_CAST.voice_settings_for("WEBB")
+        assert hawk["stability"] > DEFAULT_TTS_VOICE_SETTINGS["stability"]
+        assert webb["stability"] == DEFAULT_TTS_VOICE_SETTINGS["stability"]
+
+    def test_stacked_exclamations_collapse_in_tts_normalize(self):
+        from gkl.nextgenpodcast.scriptcraft import normalize_script_for_tts
+        raw = (
+            "ACT 1\nHAWK: Fifteen homers!! In one week!!!\n"
+            "WEBB: Noted.\n"
+        )
+        s = parse_script(raw, SPEAKERS, expected_acts=1)
+        tts = normalize_script_for_tts(s)
+        assert tts.acts[0].turns[0].line == "Fifteen homers! In one week!"
+
+
 # ---------- datapack (playoff race) ----------
 
 def _rec(name, cw, cl, ct, w=0, l=0, t=0):

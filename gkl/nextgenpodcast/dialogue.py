@@ -27,7 +27,8 @@ from gkl.nextgenpodcast.scriptcraft import (
 )
 from gkl.nextgenpodcast.showbible import Cast
 from gkl.podcast.assets import (
-    _post_audio, _require_key, generate_tts_to_file,
+    DEFAULT_TTS_VOICE_SETTINGS, _post_audio, _require_key,
+    generate_tts_to_file,
 )
 from gkl.podcast.mixer import MixerError, concat_audio_files
 from gkl.podcast.voice import ELEVENLABS_BASE_URL
@@ -103,6 +104,12 @@ async def _render_turn_clip(
     voice_id = cast.voice_for(turn.speaker)
     settings = cast.voice_settings_for(turn.speaker)
     key = f"{voice_id}|{settings.get('speed', 1.0)}|{line}"
+    # Non-default stability joins the key so a per-voice override (Hawk's
+    # anti-yelling setting) re-renders his clips; default-stability voices
+    # keep their existing cache.
+    stability = settings.get("stability")
+    if stability != DEFAULT_TTS_VOICE_SETTINGS.get("stability"):
+        key += f"|stab={stability}"
     h = hashlib.sha256(key.encode()).hexdigest()[:16]
     clip = work_dir / f"turn_{turn.speaker.lower()}_{h}.mp3"
     if not clip.exists() or clip.stat().st_size == 0:

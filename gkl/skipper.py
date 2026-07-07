@@ -504,8 +504,12 @@ def _availability_tag(player: PlayerStats, *, is_free_agent: bool = False) -> st
                 "[STARTING PITCHER — resting between scheduled starts; "
                 "NOT a bench player or drop candidate]"
             )
-        return "[BENCH — active]"
-    return "[ACTIVE — in starting lineup]"
+        return (
+            "[BENCH — TODAY'S slot only; daily league: players rotate to "
+            "BN for off-days, rest days, and day-to-day knocks. Do NOT "
+            "infer a week-long benching from this tag]"
+        )
+    return "[ACTIVE — in TODAY'S starting lineup]"
 
 
 class Skipper:

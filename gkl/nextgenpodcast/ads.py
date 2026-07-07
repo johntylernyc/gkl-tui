@@ -19,6 +19,7 @@ from pathlib import Path
 
 from gkl.nextgenpodcast import AD_WRITER_MODEL
 from gkl.nextgenpodcast.scriptcraft import call_claude
+from gkl.nextgenpodcast.showbible import CAST_VOICE_IDS
 from gkl.podcast.ads import select_ads_for_episode  # LRU reused (duck-typed)
 from gkl.podcast.assets import generate_tts_to_file
 
@@ -71,6 +72,13 @@ VOICE_GENDERS: dict[str, str] = {
     "hpp4J3VqNfWAUOO0d1Us": "female",   # Bella
 }
 
+# Cast voices (Hawk, Webb/My Guy, Sid Vega) are unique to the show's
+# recurring characters — never available to ad spots. The w15 episode
+# aired an ad in Sid's voice; this pool is what the ad writer casts from.
+AD_VOICE_POOL: list[tuple[str, str]] = [
+    (vid, desc) for vid, desc in VOICE_POOL if vid not in CAST_VOICE_IDS
+]
+
 
 @dataclass
 class NgAdSpot:
@@ -106,11 +114,24 @@ def active_spots(library: list[NgAdSpot]) -> list[NgAdSpot]:
     return [s for s in library if s.status == "active"]
 
 
+def airable_spots(
+    library: list[NgAdSpot], *, exclude_voice_ids: set[str] = frozenset(),
+) -> list[NgAdSpot]:
+    """Active spots eligible to air: never a cast voice (Hawk, Webb, Sid),
+    plus any episode-specific exclusions (this week's caller voice — an
+    ad in the caller's voice right after their call breaks the room)."""
+    blocked = CAST_VOICE_IDS | set(exclude_voice_ids)
+    return [s for s in active_spots(library) if s.voice_id not in blocked]
+
+
 def select_episode_ads(
     rotation_path: Path, n: int = 2, *, library_path: Path = DEFAULT_LIBRARY_PATH,
+    exclude_voice_ids: set[str] = frozenset(),
 ) -> list[NgAdSpot]:
-    """LRU-select n active spots (reuses the v1 rotation machinery)."""
-    lib = active_spots(load_library(library_path))
+    """LRU-select n airable spots (reuses the v1 rotation machinery)."""
+    lib = airable_spots(
+        load_library(library_path), exclude_voice_ids=exclude_voice_ids,
+    )
     return select_ads_for_episode(rotation_path, n, library=lib)
 
 
@@ -235,7 +256,7 @@ async def generate_ad_batch(
     library = load_library(library_path)
     existing = {s.slug for s in library}
 
-    pool_lines = "\n".join(f"- {vid}: {desc}" for vid, desc in VOICE_POOL)
+    pool_lines = "\n".join(f"- {vid}: {desc}" for vid, desc in AD_VOICE_POOL)
     brand_lines = "\n".join(
         f"- {s.slug}: {s.title} — {s.copy[:120]}..." for s in active_spots(library)
     ) or "(none yet)"
@@ -261,7 +282,7 @@ async def generate_ad_batch(
     )
     verdict_by_slug = {v.get("slug"): v for v in verdicts}
 
-    valid_voice_ids = {vid for vid, _ in VOICE_POOL}
+    valid_voice_ids = {vid for vid, _ in AD_VOICE_POOL}
     accepted: list[NgAdSpot] = []
     for raw in raw_spots:
         slug = raw.get("slug", "")
@@ -284,7 +305,7 @@ async def generate_ad_batch(
             continue
         voice_id = raw.get("voice_id", "")
         if voice_id not in valid_voice_ids:
-            voice_id = VOICE_POOL[len(accepted) % len(VOICE_POOL)][0]
+            voice_id = AD_VOICE_POOL[len(accepted) % len(AD_VOICE_POOL)][0]
         accepted.append(NgAdSpot(
             slug=slug,
             title=raw.get("title", slug),

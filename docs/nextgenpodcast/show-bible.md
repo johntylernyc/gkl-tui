@@ -225,6 +225,16 @@ ERA"), abbreviations spelled out per the pronunciation rules in the
 segment prompt. One stat per breath: a sentence carries at most two
 numbers. Never read a table aloud.
 
+**Excitement without yelling.** The TTS voices lean into punctuation,
+and Hawk's voice especially tips from excited into shouting when the
+script feeds it. The energy budget: at most ONE exclamation point per
+turn and about three per act; never stack them ("!!"); never write a
+word in ALL CAPS for emphasis (stat abbreviations like ERA/WHIP are
+fine). Hawk's excitement lives in word choice, short sentences, and
+interruptions — "that's a team kicking the door off its hinges" shouted
+is worse radio than the same line delivered fast and delighted. Dashes
+and fragments read as energy; exclamation points read as volume.
+
 ---
 
 ## Variety playbook

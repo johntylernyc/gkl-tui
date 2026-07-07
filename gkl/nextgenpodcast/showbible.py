@@ -23,6 +23,12 @@ from gkl.podcast.segments.weekly_recap import GUEST_VOICE_ID, HOST_VOICE_ID
 # kept out of the caller/ad pools so it never doubles as someone else.
 ANNOUNCER_VOICE_ID = "cjVigY5qzO86Huf0OWal"
 
+# Every voice that belongs to a recurring on-air character. These are
+# UNIQUE to the cast: no ad spot and no Lounge Line caller may ever use
+# one — a listener hearing Bat Boy pitch gold coins or Hawk sell injury
+# law breaks the room. Ads and callers cast from the remaining pool.
+CAST_VOICE_IDS = frozenset({HOST_VOICE_ID, GUEST_VOICE_ID, ANNOUNCER_VOICE_ID})
+
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -38,6 +44,11 @@ class CastMember:
     # `voice_settings.speed`, 0.7–1.2; the v2 model honors it). 1.0 is
     # normal; Webb sits a hair faster for a crisper delivery.
     speed: float = 1.0
+    # Optional per-voice stability override (0.0–1.0). Higher = steadier,
+    # less volume/emotion swing between takes. None uses the podcast
+    # default. Hawk runs higher: his voice kept tipping excitement into
+    # outright yelling at the default setting.
+    stability: float | None = None
 
 
 @dataclass(frozen=True)
@@ -66,13 +77,18 @@ class Cast:
 
     def voice_settings_for(self, speaker: str) -> dict:
         """Per-turn TTS voice settings for this speaker: the podcast
-        defaults plus the member's per-voice speed."""
-        return {**DEFAULT_TTS_VOICE_SETTINGS, "speed": self._member(speaker).speed}
+        defaults plus the member's per-voice speed and any stability
+        override."""
+        m = self._member(speaker)
+        settings = {**DEFAULT_TTS_VOICE_SETTINGS, "speed": m.speed}
+        if m.stability is not None:
+            settings["stability"] = m.stability
+        return settings
 
 
 DEFAULT_CAST = Cast(
     lead=CastMember(speaker="HAWK", full_name='Dale "Hawk" Hawkins',
-                    voice_id=HOST_VOICE_ID),
+                    voice_id=HOST_VOICE_ID, stability=0.75),
     analyst=CastMember(speaker="WEBB", full_name='Marcus "The Professor" Webb',
                        voice_id=GUEST_VOICE_ID, speed=1.05),
     announcer=CastMember(speaker="ANNOUNCER", full_name="Sid Vega",

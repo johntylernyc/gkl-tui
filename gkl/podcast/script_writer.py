@@ -205,7 +205,10 @@ def build_data_summary(
             "\n\nSeason and last-30-day form for every rostered player "
             "(USE THIS to verify any TREND or SEASON claim layered onto a "
             "weekly performance — e.g. 'he's slugging six-twenty over the "
-            "last thirty' or 'well above his season norm'):\n"
+            "last thirty' or 'well above his season norm'). Lineup slots "
+            "and BENCH/ACTIVE tags here are a SINGLE-DAY snapshot in a "
+            "daily league — never treat them as evidence that a player "
+            "sat (or started) the whole matchup week:\n"
             f"{format_roster_form(datapack)}"
         )
     return base
